@@ -182,6 +182,56 @@ cte_all_contacts AS (
           AND dcc.IsActiveName   = 'Yes'
           AND dp.Email IS NOT NULL AND dp.Email != ''
     ) all_contacts
+),
+
+cte_tm_status_counts AS (
+    SELECT
+        customer_id,
+        COUNT(CASE WHEN LOWER(status) = 'open'       THEN 1 END) AS TM_Open,
+        COUNT(CASE WHEN LOWER(status) = 'undecided'  THEN 1 END) AS TM_Undecided,
+        COUNT(CASE WHEN LOWER(status) = 'expired'    THEN 1 END) AS TM_Expired,
+        COUNT(CASE WHEN LOWER(status) = 'assigned'   THEN 1 END) AS TM_Assigned,
+        COUNT(CASE WHEN LOWER(status) = 'scheduled'  THEN 1 END) AS TM_Scheduled,
+        COUNT(CASE WHEN LOWER(status) = 'reserved'   THEN 1 END) AS TM_Reserved,
+        COUNT(CASE WHEN LOWER(status) = 'attended'   THEN 1 END) AS TM_Attended,
+        COUNT(CASE WHEN LOWER(status) = 'cancelled'  THEN 1 END) AS TM_Cancelled
+    FROM IT_Data_Gateway.[10XHub].tickets
+    GROUP BY customer_id
+),
+
+cte_ticket_detail_summary AS (
+    SELECT
+        customer_id,
+        STRING_AGG(
+            status_group + ': ' + products, ' | '
+        ) WITHIN GROUP (ORDER BY
+            CASE status_group
+                WHEN 'undecided' THEN 1
+                WHEN 'open'      THEN 2
+                WHEN 'reserved'  THEN 3
+                WHEN 'scheduled' THEN 4
+                WHEN 'assigned'  THEN 5
+                WHEN 'attended'  THEN 6
+                WHEN 'expired'   THEN 7
+                WHEN 'cancelled' THEN 8
+                ELSE 9
+            END
+        )                                                       AS ticket_summary
+    FROM (
+        SELECT
+            customer_id,
+            LOWER(status)                                       AS status_group,
+            STRING_AGG(product_name + ' x' + CAST(cnt AS VARCHAR(10)), ', ')
+                WITHIN GROUP (ORDER BY product_name)            AS products
+        FROM (
+            SELECT customer_id, status, product_name, COUNT(*) AS cnt
+            FROM IT_Data_Gateway.[10XHub].tickets
+            WHERE LOWER(status) IN ('undecided','open','reserved','scheduled','assigned','attended','expired','cancelled')
+            GROUP BY customer_id, status, product_name
+        ) t
+        GROUP BY customer_id, LOWER(status)
+    ) sg
+    GROUP BY customer_id
 )
 
 SELECT
@@ -193,16 +243,21 @@ SELECT
     ts.outreach_restriction,
     la.last_blast_date, la.last_called_date,
     ci.elite_status, ci.pr_status, ci.sbu_status,
+    tm.TM_Open, tm.TM_Undecided, tm.TM_Expired, tm.TM_Assigned,
+    tm.TM_Scheduled, tm.TM_Reserved, tm.TM_Attended, tm.TM_Cancelled,
+    td.ticket_summary,
     GETDATE() AS list_generated_at
 FROM cte_all_contacts ac
 INNER JOIN cte_contact_info   ci ON ci.customer_id = ac.customer_id
 INNER JOIN cte_ticket_summary ts ON ts.customer_id = ac.customer_id
 LEFT JOIN  cte_ticket_types   tt ON tt.customer_id = ac.customer_id
-LEFT JOIN cte_ticket_ids ti ON ti.customer_id = ac.customer_id
+LEFT JOIN  cte_ticket_ids     ti ON ti.customer_id = ac.customer_id
 LEFT JOIN  cte_last_activity  la ON la.customer_id = ac.customer_id
 LEFT JOIN  cte_scheduled_customers sc ON sc.customer_id = ac.customer_id
 LEFT JOIN  cte_new_buyers          nb ON nb.customer_id = ac.customer_id
 LEFT JOIN  cte_refund_customers    rc ON rc.customer_id = ac.customer_id
+LEFT JOIN  cte_tm_status_counts    tm ON tm.customer_id = ac.customer_id
+LEFT JOIN  cte_ticket_detail_summary td ON td.customer_id = ac.customer_id
 WHERE ac.rn = 1
   AND sc.customer_id IS NULL
   AND nb.customer_id IS NULL
