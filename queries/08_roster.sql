@@ -14,6 +14,15 @@
 -- right-clicks an event on the Event Overview page and drills
 -- through here. The event filter is applied automatically.
 --
+-- ✅ VALIDATED (Sep 2026):
+--   FIXED: ev.City → ev.CityName, ev.Venue → ev.VenueName
+--     City and Venue on DimEvent are numeric lookup IDs; CityName and VenueName
+--     are the human-readable text columns (confirmed from live DimEvent data).
+--   attendees columns confirmed: attendee_id, attendee_name, attendee_email,
+--     attendee_phone, first_name, last_name, dietary_restrictions all exist ✅
+--   customers columns confirmed: name, vertical, SBU, PR, EliteEdge all exist ✅
+--     vertical is a numeric code — may need a lookup for display.
+--
 -- Ghost rows (is_reset_ghost = 1) are INCLUDED here intentionally
 --   so the CC team can see no-show resets alongside live tickets.
 --   The is_reset_ghost column surfaces the distinction.
@@ -23,8 +32,8 @@ SELECT
     ev.EventName                                AS event_name,
     CAST(ev.StartDate AS date)                  AS event_date,
     ev.EventType                                AS event_type,
-    ev.City                                     AS event_city,
-    ev.Venue                                    AS venue,
+    ev.CityName                                 AS event_city,   -- City column is a numeric ID; CityName is the readable text
+    ev.VenueName                                AS venue,        -- Venue column is a numeric ID; VenueName is the readable text
 
     t.ticket_id,
     t.status                                    AS ticket_status,

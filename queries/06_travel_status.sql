@@ -13,6 +13,12 @@
 --   Ghost rows (is_reset_ghost = 1) are excluded — their travel
 --   data is NULL anyway.
 --
+-- ✅ VALIDATED (Sep 2026):
+--   travel_details column: EXISTS on tickets ✅
+--   attendance_type column: EXISTS on tickets ✅ — live value is 'In-Person' (hyphenated),
+--   not 'In Person'. Query groups by this column so casing doesn't break anything,
+--   but any slicer label or DAX filter must match 'In-Person' exactly.
+--
 -- travel_details expected values (validate with CC team):
 --   'Hotel Only', 'Flight Only', 'Both', 'Is Local', NULL
 --   NULL = travel not yet confirmed / not applicable

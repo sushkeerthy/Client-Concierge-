@@ -18,6 +18,13 @@
 --   All other statuses (Open, Reserved, etc.) are excluded —
 --   they only appear on future/in-progress tickets, not past events.
 --
+-- ✅ VALIDATED (Sep 2026):
+--   Confirmed distinct status values from live data:
+--     'attended' (lowercase, 18,567 rows) — primary outcome
+--     'No Show'  (mixed case, 117 rows)   — LOWER() in WHERE handles this correctly
+--   Other statuses present: undecided (16,532), expired (9,032), assigned (459),
+--   undecided_at_sale (167) — all correctly excluded by the IN ('attended', 'no show') filter.
+--
 -- Grain: one row per event / confirmation_status / ticket status.
 --   Power BI computes the rates (Attended %, No Show %).
 -- ============================================================

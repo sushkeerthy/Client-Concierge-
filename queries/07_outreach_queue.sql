@@ -11,6 +11,13 @@
 --   This is an operational page — the CC team uses it to know
 --   which tickets to skip when working their confirmation queue.
 --
+-- ✅ VALIDATED (Sep 2026):
+--   outreach_restriction column: EXISTS ✅
+--   Live distinct values: 'Do Not Contact' (1,457), 'Do Not Call' (142), 'Do Not Blast' (54)
+--   26 rows have an empty string '' (not NULL) — the IN list filter correctly excludes these.
+--   attendees table: attendee_id, attendee_name, attendee_email, attendee_phone all confirmed ✅
+--   customers table: name, vertical confirmed ✅ (vertical is a numeric code, not display text)
+--
 -- outreach_restriction values (confirmed):
 --   'Do Not Blast'    – exclude from mass blast campaigns
 --   'Do Not Call'     – exclude from phone outreach

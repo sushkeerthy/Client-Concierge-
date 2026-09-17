@@ -8,6 +8,12 @@
 --           Q4 — per ticket vs per company
 --           Q6 — how many double confirmed?
 --
+-- ✅ VALIDATED (Sep 2026):
+--   [ticket-manager].[customers] confirmed: id, name, vertical, SBU, PR, EliteEdge all exist.
+--   NOTE: vertical column contains numeric codes (e.g. "5"), not display names.
+--   If the report needs readable vertical names, a lookup join is required.
+--   is_last_confirmer + ticket_status_action_count logic validated via vw_confirmation_actions.
+--
 -- Two sections:
 --   Section A — Per-ticket: how many times was each ticket confirmed?
 --               Uses is_last_confirmer = 1 to get one row per ticket
