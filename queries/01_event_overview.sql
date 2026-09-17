@@ -71,11 +71,8 @@ FROM [dbo].[vw_tickets_all]         t
 JOIN [DWH].[DimEvent]               e   ON t.event_id = e.CVEventID
 
 WHERE
-    t.is_reset_ghost = 0            -- live tickets only — matches EventFlow app
-    -- NOTE: if you want to exclude cancelled tickets from the denominator,
-    -- add: AND LOWER(t.status) != 'cancelled'
-    -- Validate with the CC team whether cancelled tickets should count
-    -- toward total_tickets or be excluded entirely.
+    t.is_reset_ghost = 0                    -- live tickets only — matches EventFlow app
+    AND LOWER(t.status) != 'cancelled'      -- cancelled tickets excluded from all counts
 
 GROUP BY
     e.CVEventID,

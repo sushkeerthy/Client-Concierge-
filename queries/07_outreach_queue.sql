@@ -11,8 +11,10 @@
 --   This is an operational page — the CC team uses it to know
 --   which tickets to skip when working their confirmation queue.
 --
--- outreach_restriction values to validate with CC team:
---   'DNC', 'Restricted', NULL / 'None' (no restriction)
+-- outreach_restriction values (confirmed):
+--   'Do Not Blast'    – exclude from mass blast campaigns
+--   'Do Not Call'     – exclude from phone outreach
+--   'Do Not Contact'  – full exclusion from all outreach
 --
 -- Grain: one row per ticket (detail-level for the CC team).
 -- ============================================================
@@ -40,8 +42,7 @@ JOIN [10XHub].[customers]               c   ON  t.customer_id       = c.id
 
 WHERE
     t.is_reset_ghost        = 0
-    AND t.outreach_restriction IS NOT NULL
-    AND LOWER(t.outreach_restriction) NOT IN ('none', '')   -- exclude non-restricted
+    AND t.outreach_restriction IN ('Do Not Blast', 'Do Not Call', 'Do Not Contact')
     AND t.event_date        >= CAST(GETDATE() AS date)      -- upcoming events only
 
 ORDER BY
