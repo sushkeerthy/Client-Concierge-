@@ -1,0 +1,58 @@
+-- ============================================================
+-- 03_daily_activity.sql
+-- CC BI Semantic Model Redesign | BizOps | Sep 2026
+--
+-- Page:    Daily Activity
+-- Answers: "What did the team do today and this week?"
+--           - How many confirmations by day
+--           - Breakdown by confirmation method (touch source)
+--           - Breakdown by event type (Elite Edge filter for Q2)
+--
+-- Source: vw_confirmation_actions (activity log)
+--
+-- confirmation_touch_source: how the action was logged
+--   e.g. Manual, Dialer, System — the "method" the rep used
+--
+-- Grain: one row per date / event / touch source / status.
+--   tickets_confirmed uses DISTINCT to avoid double-counting
+--   a ticket touched multiple times in the same day.
+-- ============================================================
+
+SELECT
+    ca.action_date_az                           AS action_date,
+    ca.week_label,
+    ca.week_offset,       -- 0 = current week, -1 = last week
+    ev.EventName                                AS event_name,
+    ev.EventType                                AS event_type,   -- filter on 'Elite Edge' for Q2
+    CAST(ev.StartDate AS date)                  AS event_date,
+    ca.confirmation_status,
+    ca.confirmation_touch_source,               -- Manual / Dialer / System / etc.
+
+    -- Distinct tickets that had a confirmation action on this date
+    COUNT(DISTINCT ca.ticket_id)                AS tickets_confirmed,
+
+    -- Total actions taken (one ticket can have multiple actions in a day)
+    COUNT(*)                                    AS total_actions
+
+FROM [dbo].[vw_confirmation_actions]    ca
+JOIN [dbo].[vw_tickets_all]             t   ON  ca.ticket_id        = t.ticket_id
+                                            AND t.is_reset_ghost    = 0
+JOIN [DWH].[DimEvent]                   ev  ON  t.event_id          = ev.CVEventID
+
+WHERE
+    ca.is_rep_action        = 1     -- human rep actions only
+
+GROUP BY
+    ca.action_date_az,
+    ca.week_label,
+    ca.week_offset,
+    ev.EventName,
+    ev.EventType,
+    ev.StartDate,
+    ca.confirmation_status,
+    ca.confirmation_touch_source
+
+ORDER BY
+    ca.action_date_az       DESC,
+    ev.EventType,
+    tickets_confirmed       DESC;
