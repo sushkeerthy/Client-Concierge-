@@ -15,6 +15,17 @@
 --
 -- Validation target: numbers here should match what the CC team
 --   sees in the EventFlow app for each event's confirmation counts.
+--
+-- ⚠ OPEN QUESTION FOR KYLE — 'Scheduled' ticket status:
+--   Status enum: Scheduled = associated with the event but NO attendee assigned yet.
+--   This query currently counts Scheduled tickets in total_tickets.
+--   The EventFlow app may exclude them (showing only Reserved+ which have an attendee).
+--   Observed deltas:
+--     CV-330 (Sep 24-25 10X360):   query = 48 total | app = 46  → 2 Scheduled tickets
+--     CV-337 (Oct 09-11 Elite Edge): similar delta observed, exact count TBD
+--   Decision needed: should Scheduled tickets count toward total_tickets?
+--   If NO → add:  AND LOWER(t.status) NOT IN ('scheduled', 'cancelled')
+--   If YES → no change needed (current behavior).
 -- ============================================================
 
 SELECT
