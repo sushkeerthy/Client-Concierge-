@@ -32,9 +32,15 @@
 --   or are they safe to ignore?
 --
 -- ✅ VALIDATED (Sep 2026):
---   Human rep filter (is_rep_action = 1) cleanly excludes dialer,
---   kiosk, system, and ProjectionImport actors. No bleed-through
---   observed in 30-day sample.
+--   is_rep_action exact logic (from view definition):
+--     changed_by NOT IN ('System', 'bulk-import') → is_rep_action = 1
+--   Three touch sources feed vw_confirmation_actions:
+--     'Status Update'    – history action = 'Confirmation status updated'
+--     'Date Update'      – history action = 'Confirmation date updated'
+--     'Pre-History Direct' – synthesized from tickets.confirmed_by where no
+--                            matching history row exists (~128 tickets)
+--   Date Update is the dominant source on many days (e.g. Sep 17: 57 Date Update
+--   vs 10 Status Update). Earlier validation pass missed this — counts corrected.
 -- ============================================================
 
 SELECT

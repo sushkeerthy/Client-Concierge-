@@ -22,12 +22,20 @@
 --   DISTINCT working correctly — Sep 11 CV-337 shows 14 distinct tickets
 --   vs 16 total actions (2 tickets touched twice that day, absorbed by DISTINCT).
 --
--- ⚠ NEEDS VIEW TO VALIDATE:
---   confirmation_touch_source — computed inside vw_confirmation_actions;
---     likely derived from action notes or changed_by pattern (Dialer vs Manual).
---     Cannot confirm values or coverage from raw history alone.
---   week_label / week_offset — timezone-aware week buckets (Arizona time),
---     also computed in the view. Validate after EventFlow semantic model is live.
+-- ✅ confirmation_touch_source confirmed values (from view definition):
+--   'Status Update'      – history action = 'Confirmation status updated'
+--   'Date Update'        – history action = 'Confirmation date updated'
+--   'Pre-History Direct' – synthesized from tickets.confirmed_by (~128 tickets,
+--                          confirmed before history tracking was enabled)
+--   NOTE: Date Update is often the dominant source. Sep 17 example:
+--     Date Update = 57 tickets, Status Update = 10. Missing this source
+--     understates daily totals significantly.
+--
+-- ✅ week_offset / week_label confirmed (from view definition):
+--   Week anchor: 2024-01-01 (Monday). Week boundary = Monday.
+--   Timezone: Arizona (UTC-7, no DST) via 'US Mountain Standard Time'.
+--   week_offset: 0 = this week, -1 = last week, +1 = next week.
+--   week_label: 'This Week', 'Last Week', 'N Weeks Ago', 'N Weeks Ahead'.
 -- ============================================================
 
 SELECT
