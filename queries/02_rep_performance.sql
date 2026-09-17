@@ -21,6 +21,20 @@
 --
 -- Grain: one row per rep / date / event / confirmation_status.
 --   Power BI slicers handle the today / this week aggregation.
+--
+-- ⚠ OPEN QUESTION FOR KYLE — tickets with no event_id:
+--   A small number of confirmation actions in the history log have
+--   no event_id on the ticket at the time of the action (ticket was
+--   confirmed before being assigned to an event, or data anomaly).
+--   This query's JOIN to vw_tickets_all (via event_id → DimEvent)
+--   will DROP those actions — they won't appear for any rep.
+--   Decision needed: should these count (toward a rep's total),
+--   or are they safe to ignore?
+--
+-- ✅ VALIDATED (Sep 2026):
+--   Human rep filter (is_rep_action = 1) cleanly excludes dialer,
+--   kiosk, system, and ProjectionImport actors. No bleed-through
+--   observed in 30-day sample.
 -- ============================================================
 
 SELECT
