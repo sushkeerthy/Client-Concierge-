@@ -16,6 +16,18 @@
 -- Grain: one row per date / event / touch source / status.
 --   tickets_confirmed uses DISTINCT to avoid double-counting
 --   a ticket touched multiple times in the same day.
+--
+-- ✅ VALIDATED (Sep 2026) — daily ticket counts:
+--   Raw history confirms daily confirmation counts for last 14 days.
+--   DISTINCT working correctly — Sep 11 CV-337 shows 14 distinct tickets
+--   vs 16 total actions (2 tickets touched twice that day, absorbed by DISTINCT).
+--
+-- ⚠ NEEDS VIEW TO VALIDATE:
+--   confirmation_touch_source — computed inside vw_confirmation_actions;
+--     likely derived from action notes or changed_by pattern (Dialer vs Manual).
+--     Cannot confirm values or coverage from raw history alone.
+--   week_label / week_offset — timezone-aware week buckets (Arizona time),
+--     also computed in the view. Validate after EventFlow semantic model is live.
 -- ============================================================
 
 SELECT
