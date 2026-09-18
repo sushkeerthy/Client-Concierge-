@@ -189,9 +189,11 @@ table vw_tickets_all
 
 	column travel_type
 		dataType: string
+		sourceProviderType: varchar(100)
 		lineageTag: e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a9b
+		sourceLineageTag: travel_type
 		summarizeBy: none
-		expression = COALESCE([double_confirm_type], [travel_details])
+		sourceColumn: travel_type
 
 		annotation SummarizationSetBy = Automatic
 

@@ -26,6 +26,8 @@
 --             No new joins; column is already on the source table —
 --             adding it to the SELECT does not change the query plan.
 --             NULL on ghost rows (ticket_no_show_resets has no travel data).
+--             Added travel_type = COALESCE(double_confirm_type, travel_details).
+--             Covers ~1,360 pre-DC-workflow tickets that only have travel_details.
 -- ============================================================
 
 CREATE OR ALTER VIEW [dbo].[vw_tickets_all] AS
@@ -56,7 +58,8 @@ WITH tickets_live AS (
         COALESCE(CAST(t.is_comped    AS int), 0)       AS is_comped,
         t.undecided_timestamp,
         CAST(t.attendance_type       AS varchar(50))   AS attendance_type,
-        CAST(t.travel_details        AS varchar(8000)) AS travel_details,  -- added Sep 2026
+        CAST(t.travel_details        AS varchar(8000)) AS travel_details,
+        CAST(COALESCE(t.double_confirm_type, t.travel_details) AS varchar(100)) AS travel_type,
         CAST(0                       AS bit)           AS is_reset_ghost
     FROM [10XHub].[tickets] t
 ),
@@ -87,7 +90,8 @@ tickets_reset_ghost AS (
         COALESCE(CAST(x.is_comped    AS int), 0)       AS is_comped,
         CAST(NULL                    AS datetime2)     AS undecided_timestamp,
         CAST(x.attendance_type       AS varchar(50))   AS attendance_type,
-        CAST(NULL                    AS varchar(8000)) AS travel_details,  -- not available on resets table
+        CAST(NULL                    AS varchar(8000)) AS travel_details,
+        CAST(x.double_confirm_type   AS varchar(100))  AS travel_type,
         CAST(1                       AS bit)           AS is_reset_ghost
     FROM (
         SELECT
