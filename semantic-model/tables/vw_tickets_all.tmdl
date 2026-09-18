@@ -1,0 +1,304 @@
+table vw_tickets_all
+	lineageTag: 6b47cbe9-ed38-4064-9df5-bab4bf2ba488
+	sourceLineageTag: [dbo].[vw_tickets_all]
+
+	column ticket_id
+		dataType: string
+		sourceProviderType: varchar(100)
+		lineageTag: 39b707dc-0350-4d8e-ab02-853141334134
+		sourceLineageTag: ticket_id
+		summarizeBy: none
+		sourceColumn: ticket_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column event_id
+		dataType: string
+		sourceProviderType: varchar(8000)
+		lineageTag: 1f703e8a-395c-4415-af7f-08558c6ebde5
+		sourceLineageTag: event_id
+		summarizeBy: none
+		sourceColumn: event_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column event_type_id
+		dataType: int64
+		formatString: 0
+		sourceProviderType: int
+		lineageTag: b4fbfc3c-fb2a-47a4-bef9-c0664b125283
+		sourceLineageTag: event_type_id
+		summarizeBy: none
+		sourceColumn: event_type_id
+
+		changedProperty = SummarizeBy
+
+		annotation SummarizationSetBy = User
+
+	column attendee_id
+		dataType: int64
+		formatString: 0
+		sourceProviderType: int
+		lineageTag: 247f73d5-0cfb-44ba-8c34-dc7140fae2ad
+		sourceLineageTag: attendee_id
+		summarizeBy: none
+		sourceColumn: attendee_id
+
+		changedProperty = SummarizeBy
+
+		annotation SummarizationSetBy = User
+
+	column customer_id
+		dataType: int64
+		formatString: 0
+		sourceProviderType: int
+		lineageTag: f6d51e14-0c21-46fa-81f3-72bad93021b0
+		sourceLineageTag: customer_id
+		summarizeBy: none
+		sourceColumn: customer_id
+
+		changedProperty = SummarizeBy
+
+		annotation SummarizationSetBy = User
+
+	column product_category_name
+		dataType: string
+		sourceProviderType: varchar(200)
+		lineageTag: 02e31eea-ab8e-4d15-962b-0df25967b6c9
+		sourceLineageTag: product_category_name
+		summarizeBy: none
+		sourceColumn: product_category_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_name
+		dataType: string
+		sourceProviderType: varchar(200)
+		lineageTag: 6075d10a-387e-4b48-a830-a69770cc8914
+		sourceLineageTag: product_name
+		summarizeBy: none
+		sourceColumn: product_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column scheduled_event_name
+		dataType: string
+		sourceProviderType: varchar(200)
+		lineageTag: fd7b9ae5-39fb-47e0-b59e-7f0fc31f47b5
+		sourceLineageTag: scheduled_event_name
+		summarizeBy: none
+		sourceColumn: scheduled_event_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column ticket_type
+		dataType: string
+		sourceProviderType: varchar(100)
+		lineageTag: 5d958d41-f546-43cd-a585-2b67351adced
+		sourceLineageTag: ticket_type
+		summarizeBy: none
+		sourceColumn: ticket_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column status
+		dataType: string
+		sourceProviderType: varchar(100)
+		lineageTag: 10bd44d2-7b7c-464e-b7ce-c630b2375f08
+		sourceLineageTag: status
+		summarizeBy: none
+		sourceColumn: status
+
+		annotation SummarizationSetBy = Automatic
+
+	column confirmation_status
+		dataType: string
+		sourceProviderType: varchar(100)
+		lineageTag: 03f7e121-2023-41be-9c42-77b1fe36c82c
+		sourceLineageTag: confirmation_status
+		summarizeBy: none
+		sourceColumn: confirmation_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column event_date
+		dataType: dateTime
+		formatString: General Date
+		sourceProviderType: date
+		lineageTag: 43ee0e31-3cc5-4d3d-a7dd-4b0d49dde061
+		sourceLineageTag: event_date
+		summarizeBy: none
+		sourceColumn: event_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column ticket_price
+		dataType: double
+		sourceProviderType: decimal(18, 2)
+		lineageTag: 49a92300-6834-4a21-ab59-aadb12115a3c
+		sourceLineageTag: ticket_price
+		summarizeBy: none
+		sourceColumn: ticket_price
+
+		changedProperty = SummarizeBy
+
+		annotation SummarizationSetBy = User
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column confirmation_method
+		dataType: string
+		sourceProviderType: varchar(100)
+		lineageTag: d2130ed9-cd75-4b5f-8c71-e21619312690
+		sourceLineageTag: confirmation_method
+		summarizeBy: none
+		sourceColumn: confirmation_method
+
+		annotation SummarizationSetBy = Automatic
+
+	column confirmed_date
+		dataType: dateTime
+		formatString: General Date
+		sourceProviderType: date
+		lineageTag: 0bfc2d43-2f48-4f57-9476-379721dab604
+		sourceLineageTag: confirmed_date
+		summarizeBy: none
+		sourceColumn: confirmed_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column double_confirm_type
+		dataType: string
+		sourceProviderType: varchar(100)
+		lineageTag: 767f2859-4a49-4a6c-aa31-0c8e618f5e7a
+		sourceLineageTag: double_confirm_type
+		summarizeBy: none
+		sourceColumn: double_confirm_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column travel_details
+		dataType: string
+		sourceProviderType: varchar(8000)
+		lineageTag: d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a
+		sourceLineageTag: travel_details
+		summarizeBy: none
+		sourceColumn: travel_details
+
+		annotation SummarizationSetBy = Automatic
+
+	column travel_type
+		dataType: string
+		lineageTag: e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a9b
+		summarizeBy: none
+		expression = COALESCE([double_confirm_type], [travel_details])
+
+		annotation SummarizationSetBy = Automatic
+
+	column outreach_restriction
+		dataType: string
+		sourceProviderType: varchar(100)
+		lineageTag: 8a36d490-ee92-4031-8268-727a0a4d9d90
+		sourceLineageTag: outreach_restriction
+		summarizeBy: none
+		sourceColumn: outreach_restriction
+
+		annotation SummarizationSetBy = Automatic
+
+	column person_id
+		dataType: int64
+		formatString: 0
+		sourceProviderType: int
+		lineageTag: b7b69cdb-33d0-4255-b9c5-83e93a003c4a
+		sourceLineageTag: person_id
+		summarizeBy: none
+		sourceColumn: person_id
+
+		changedProperty = SummarizeBy
+
+		annotation SummarizationSetBy = User
+
+	column sales_order_id
+		dataType: string
+		sourceProviderType: varchar(100)
+		lineageTag: cf133151-acfc-4e95-8aeb-c22041f3ef8c
+		sourceLineageTag: sales_order_id
+		summarizeBy: none
+		sourceColumn: sales_order_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column purchaser_email
+		dataType: string
+		sourceProviderType: varchar(200)
+		lineageTag: 6081916d-76b4-4f86-84ed-d44c7f06f1fd
+		sourceLineageTag: purchaser_email
+		summarizeBy: none
+		sourceColumn: purchaser_email
+
+		annotation SummarizationSetBy = Automatic
+
+	column purchaser_name
+		dataType: string
+		sourceProviderType: varchar(200)
+		lineageTag: 11b853d2-d41b-4471-907d-23eddae44864
+		sourceLineageTag: purchaser_name
+		summarizeBy: none
+		sourceColumn: purchaser_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_comped
+		dataType: int64
+		formatString: 0
+		sourceProviderType: int
+		lineageTag: 0bd08dec-4903-4aad-9f33-a8a88f66b78c
+		sourceLineageTag: is_comped
+		summarizeBy: none
+		sourceColumn: is_comped
+
+		changedProperty = SummarizeBy
+
+		annotation SummarizationSetBy = User
+
+	column undecided_timestamp
+		dataType: dateTime
+		formatString: General Date
+		sourceProviderType: datetime2
+		lineageTag: f6d0b057-79e2-4eb1-bdc1-6ccfe072b0dc
+		sourceLineageTag: undecided_timestamp
+		summarizeBy: none
+		sourceColumn: undecided_timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	column attendance_type
+		dataType: string
+		sourceProviderType: varchar(50)
+		lineageTag: ed859ef6-7e66-49a9-a4b1-4fda7bdf91c0
+		sourceLineageTag: attendance_type
+		summarizeBy: none
+		sourceColumn: attendance_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_reset_ghost
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		sourceProviderType: bit
+		lineageTag: d7c07944-6701-4445-ade4-114bbac5d5ad
+		sourceLineageTag: is_reset_ghost
+		summarizeBy: none
+		sourceColumn: is_reset_ghost
+
+		annotation SummarizationSetBy = Automatic
+
+	partition vw_tickets_all = entity
+		mode: directLake
+		source
+			entityName: vw_tickets_all
+			schemaName: dbo
+			expressionSource: DatabaseQuery
+
+	annotation PBI_ResultType = Table
+

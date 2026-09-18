@@ -1,0 +1,334 @@
+table 'CC Confirmations Measures'
+	lineageTag: cc001-measures-confirmations
+
+	// -------------------------------------------------------
+	// CORE CONFIRMATION COUNTS
+	// -------------------------------------------------------
+
+	measure Confirmations =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[confirmation_status] IN {"Confirmed", "Double Confirmed"}
+			)
+		formatString: #,0
+
+	measure Confirmed =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Confirmed"
+			)
+		formatString: #,0
+
+	measure 'Double Confirmed' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Double Confirmed"
+			)
+		formatString: #,0
+
+	measure 'Double Confirmations' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Double Confirmed"
+			)
+		formatString: #,0
+
+	measure 'Total Businesses' =
+			DISTINCTCOUNT('customers'[name])
+		formatString: #,0
+
+	// -------------------------------------------------------
+	// WEEK-OVER-WEEK
+	// -------------------------------------------------------
+
+	measure 'Confirmations TW' =
+			CALCULATE(
+			    [Confirmations],
+			    REMOVEFILTERS(
+			        'vw_confirmation_actions'[week_label],
+			        'vw_confirmation_actions'[week_start_date],
+			        'vw_confirmation_actions'[week_offset],
+			        'vw_confirmation_actions'[week_number],
+			        'vw_confirmation_actions'[week_year]
+			    ),
+			    'vw_confirmation_actions'[week_offset] = 0
+			)
+		formatString: #,0
+
+	measure 'Confirmations LW' =
+			CALCULATE(
+			    [Confirmations],
+			    REMOVEFILTERS(
+			        'vw_confirmation_actions'[week_label],
+			        'vw_confirmation_actions'[week_start_date],
+			        'vw_confirmation_actions'[week_offset],
+			        'vw_confirmation_actions'[week_number],
+			        'vw_confirmation_actions'[week_year]
+			    ),
+			    'vw_confirmation_actions'[week_offset] = -1
+			)
+		formatString: #,0
+
+	measure 'WoW Change' = [Confirmations TW] - [Confirmations LW]
+		formatString: #,0
+
+	measure 'WoW %' = DIVIDE([WoW Change], [Confirmations LW])
+		formatString: 0.0%;-0.0%;0.0%
+
+	// -------------------------------------------------------
+	// DATA STATUS
+	// -------------------------------------------------------
+
+	measure 'Data Status' =
+			"Data through " &
+			FORMAT(
+			    MAX('vw_confirmation_actions'[action_time_az]),
+			    "MMM D 'at' h:mm AM/PM",
+			    "en-US"
+			) &
+			" AZ  •  Viewed " &
+			FORMAT(NOW() - TIME(7, 0, 0), "MMM D 'at' h:mm AM/PM", "en-US")
+
+	// -------------------------------------------------------
+	// CONFIRMATION DEPTH
+	// -------------------------------------------------------
+
+	measure 'Net New Confirmed' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Confirmed",
+			    'vw_confirmation_actions'[ticket_confirmation_rank] = 1
+			)
+		formatString: #,0
+
+	measure 'Net New Double Confirmed' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Double Confirmed",
+			    'vw_confirmation_actions'[ticket_confirmation_rank] = 1
+			)
+		formatString: #,0
+
+	measure 'Net New Confirmed Today' =
+			CALCULATE(
+			    [Net New Confirmed],
+			    'vw_confirmation_actions'[action_date_az] = TODAY()
+			)
+		formatString: #,0
+
+	measure 'Tickets Confirmed 2+ Times' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Confirmed",
+			    'vw_confirmation_actions'[ticket_status_action_count] >= 2
+			)
+		formatString: #,0
+
+	measure 'Times Confirmed' =
+			COALESCE(
+			    CALCULATE(
+			        MAX('vw_confirmation_actions'[ticket_status_action_count]),
+			        'vw_confirmation_actions'[confirmation_status] = "Confirmed"
+			    ),
+			    0
+			)
+		formatString: 0
+
+	measure 'Times Double Confirmed' =
+			COALESCE(
+			    CALCULATE(
+			        MAX('vw_confirmation_actions'[ticket_status_action_count]),
+			        'vw_confirmation_actions'[confirmation_status] = "Double Confirmed"
+			    ),
+			    0
+			)
+		formatString: 0
+
+	// -------------------------------------------------------
+	// TRAVEL MEASURES
+	// Note: double_confirm_type on vw_tickets_all replaces
+	//       Hotel/Flight Details from the old vw_cc_confirmations
+	// -------------------------------------------------------
+
+	measure 'RT Travel Confirmed' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_first_travel_action] = 1
+			)
+		formatString: #,0
+
+	measure 'RT Flight Only' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_first_travel_action] = 1,
+			    'vw_tickets_all'[travel_type] = "Flight Only"
+			)
+		formatString: #,0
+
+	measure 'RT Hotel Only' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_first_travel_action] = 1,
+			    'vw_tickets_all'[travel_type] = "Hotel Only"
+			)
+		formatString: #,0
+
+	measure 'RT Both' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_first_travel_action] = 1,
+			    'vw_tickets_all'[travel_type] = "Both"
+			)
+		formatString: #,0
+
+	measure 'RT Is Local' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_first_travel_action] = 1,
+			    'vw_tickets_all'[travel_type] = "Is Local"
+			)
+		formatString: #,0
+
+	// -------------------------------------------------------
+	// EVENT HEALTH (current ticket state from vw_tickets_all)
+	// -------------------------------------------------------
+
+	measure 'Total Tickets' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_tickets_all'[ticket_id]),
+			    'vw_tickets_all'[is_reset_ghost] = FALSE()
+			)
+		formatString: #,0
+
+	measure 'Confirmed Tickets' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_tickets_all'[ticket_id]),
+			    'vw_tickets_all'[is_reset_ghost] = FALSE(),
+			    'vw_tickets_all'[confirmation_status] IN {"Confirmed", "Double Confirmed"}
+			)
+		formatString: #,0
+
+	measure '% Confirmed' =
+			DIVIDE([Confirmed Tickets], [Total Tickets])
+		formatString: 0.0%;-0.0%;0.0%
+
+	// -------------------------------------------------------
+	// ATTENDANCE OUTCOMES (past events, is_last_confirmer = 1)
+	// -------------------------------------------------------
+
+	measure '_Confirmed Tickets Past' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[is_last_confirmer] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Confirmed",
+			    'vw_confirmation_actions'[original_event_date] < NOW()
+			)
+
+	measure '_Confirmed & Attended' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[is_last_confirmer] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Confirmed",
+			    'vw_confirmation_actions'[ticket_outcome] = "Attended",
+			    'vw_confirmation_actions'[original_event_date] < NOW()
+			)
+
+	measure 'Confirmation Attendance %' = DIVIDE([_Confirmed & Attended], [_Confirmed Tickets Past])
+		formatString: 0.0%;-0.0%;0.0%
+
+	measure '_DC Tickets Past' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[is_last_confirmer] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Double Confirmed",
+			    'vw_confirmation_actions'[original_event_date] < NOW()
+			)
+
+	measure '_DC & Attended' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[is_last_confirmer] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Double Confirmed",
+			    'vw_confirmation_actions'[ticket_outcome] = "Attended",
+			    'vw_confirmation_actions'[original_event_date] < NOW()
+			)
+
+	measure 'DC Attendance %' = DIVIDE([_DC & Attended], [_DC Tickets Past])
+		formatString: 0.0%;-0.0%;0.0%
+
+	measure '_Confirmed No Shows' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[is_last_confirmer] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Confirmed",
+			    'vw_confirmation_actions'[ticket_outcome] IN {"No Show", "No Show (Reset)"},
+			    'vw_confirmation_actions'[original_event_date] < NOW()
+			)
+
+	measure '_DC No Shows' =
+			CALCULATE(
+			    DISTINCTCOUNT('vw_confirmation_actions'[ticket_id]),
+			    'vw_confirmation_actions'[is_rep_action] = 1,
+			    'vw_confirmation_actions'[is_last_confirmer] = 1,
+			    'vw_confirmation_actions'[confirmation_status] = "Double Confirmed",
+			    'vw_confirmation_actions'[ticket_outcome] IN {"No Show", "No Show (Reset)"},
+			    'vw_confirmation_actions'[original_event_date] < NOW()
+			)
+
+	measure 'Confirmed No Show %' = DIVIDE([_Confirmed No Shows], [_Confirmed Tickets Past])
+		formatString: 0.0%;-0.0%;0.0%
+
+	measure 'DC No Show %' = DIVIDE([_DC No Shows], [_DC Tickets Past])
+		formatString: 0.0%;-0.0%;0.0%
+
+	// -------------------------------------------------------
+	// AVG DAYS TO DOUBLE CONFIRM
+	// Derived from action history: first Confirmed → first Double Confirmed per ticket
+	// -------------------------------------------------------
+
+	measure 'Avg Days to DC' =
+			AVERAGEX(
+			    CALCULATETABLE(
+			        VALUES('vw_confirmation_actions'[ticket_id]),
+			        'vw_confirmation_actions'[is_rep_action] = 1,
+			        'vw_confirmation_actions'[confirmation_status] IN {"Confirmed", "Double Confirmed"}
+			    ),
+			    VAR firstConfirmed =
+			        CALCULATE(
+			            MIN('vw_confirmation_actions'[action_date_az]),
+			            'vw_confirmation_actions'[confirmation_status] = "Confirmed",
+			            'vw_confirmation_actions'[is_rep_action] = 1
+			        )
+			    VAR firstDC =
+			        CALCULATE(
+			            MIN('vw_confirmation_actions'[action_date_az]),
+			            'vw_confirmation_actions'[confirmation_status] = "Double Confirmed",
+			            'vw_confirmation_actions'[is_rep_action] = 1
+			        )
+			    RETURN
+			        IF(
+			            NOT ISBLANK(firstConfirmed) && NOT ISBLANK(firstDC),
+			            DATEDIFF(firstConfirmed, firstDC, DAY),
+			            BLANK()
+			        )
+			)
+		formatString: 0.0
+
+	partition 'CC Confirmations Measures' = calculated
+		mode: import
+		source = ""
+
+	annotation PBI_Id = cc001-measures-confirmations
+
