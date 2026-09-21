@@ -5,7 +5,7 @@ WITH cte_essentials_ud AS (
         t.purchaser_name, t.purchaser_email, t.purchaser_phone
     FROM IT_Data_Gateway.[10XHub].tickets t
     WHERE t.product_name LIKE '%Essential%'
-      AND t.status IN ('undecided', 'open')
+      AND t.status IN ('undecided', 'open', 'expired')
 ),
 
 cte_scheduled_customers AS (
@@ -92,6 +92,15 @@ cte_ticket_ids AS (
         FROM cte_essentials_ud
     ) deduped
     GROUP BY customer_id
+),
+
+cte_transaction_dates AS (
+    SELECT
+        ud.customer_id,
+        MIN(tr.transaction_date) AS transaction_date
+    FROM cte_essentials_ud ud
+    INNER JOIN IT_Data_Gateway.[10XHub].transactions tr ON tr.cv_transaction_id = ud.transaction_id
+    GROUP BY ud.customer_id
 ),
 
 cte_last_activity AS (
@@ -237,7 +246,7 @@ cte_ticket_detail_summary AS (
 SELECT
     ci.business_name, ci.cv_customer_id,
     ac.contact_name, ac.contact_email, ac.contact_phone, ac.contact_source,
-    ts.ticket_count, tt.ticket_types, ti.ticket_ids,
+    ts.ticket_count, CAST(td2.transaction_date AS DATE) AS transaction_date, tt.ticket_types, ti.ticket_ids,
     ts.priority_date,
     DATEDIFF(DAY, ts.priority_date, GETDATE()) AS days_in_queue,
     ts.outreach_restriction,
@@ -248,16 +257,17 @@ SELECT
     td.ticket_summary,
     GETDATE() AS list_generated_at
 FROM cte_all_contacts ac
-INNER JOIN cte_contact_info   ci ON ci.customer_id = ac.customer_id
-INNER JOIN cte_ticket_summary ts ON ts.customer_id = ac.customer_id
-LEFT JOIN  cte_ticket_types   tt ON tt.customer_id = ac.customer_id
-LEFT JOIN  cte_ticket_ids     ti ON ti.customer_id = ac.customer_id
-LEFT JOIN  cte_last_activity  la ON la.customer_id = ac.customer_id
-LEFT JOIN  cte_scheduled_customers sc ON sc.customer_id = ac.customer_id
-LEFT JOIN  cte_new_buyers          nb ON nb.customer_id = ac.customer_id
-LEFT JOIN  cte_refund_customers    rc ON rc.customer_id = ac.customer_id
-LEFT JOIN  cte_tm_status_counts    tm ON tm.customer_id = ac.customer_id
-LEFT JOIN  cte_ticket_detail_summary td ON td.customer_id = ac.customer_id
+INNER JOIN cte_contact_info          ci  ON ci.customer_id  = ac.customer_id
+INNER JOIN cte_ticket_summary        ts  ON ts.customer_id  = ac.customer_id
+LEFT JOIN  cte_ticket_types          tt  ON tt.customer_id  = ac.customer_id
+LEFT JOIN  cte_ticket_ids            ti  ON ti.customer_id  = ac.customer_id
+LEFT JOIN  cte_last_activity         la  ON la.customer_id  = ac.customer_id
+LEFT JOIN  cte_transaction_dates     td2 ON td2.customer_id = ac.customer_id
+LEFT JOIN  cte_scheduled_customers   sc  ON sc.customer_id  = ac.customer_id
+LEFT JOIN  cte_new_buyers            nb  ON nb.customer_id  = ac.customer_id
+LEFT JOIN  cte_refund_customers      rc  ON rc.customer_id  = ac.customer_id
+LEFT JOIN  cte_tm_status_counts      tm  ON tm.customer_id  = ac.customer_id
+LEFT JOIN  cte_ticket_detail_summary td  ON td.customer_id  = ac.customer_id
 WHERE ac.rn = 1
   AND sc.customer_id IS NULL
   AND nb.customer_id IS NULL

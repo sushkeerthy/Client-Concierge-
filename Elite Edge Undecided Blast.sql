@@ -17,7 +17,7 @@ WITH cte_elite_edge_ud AS (
         t.purchaser_name, t.purchaser_email, t.purchaser_phone
     FROM [10XHub].[tickets] t
     WHERE t.product_name LIKE '%Elite Edge%'
-      AND t.status IN ('undecided', 'open')
+      AND t.status IN ('undecided', 'open', 'expired')
 ),
 
 cte_scheduled_customers AS (
@@ -290,7 +290,7 @@ SELECT
     ac.contact_phone,
     ac.contact_source,
     ts.ticket_count,
-    CAST(COALESCE(pd.first_purchase_date, ts.reg_date) AS DATE) AS first_purchase_date,
+    CAST(COALESCE(pd.first_purchase_date, ts.reg_date) AS DATE) AS transaction_date,
     tt.ticket_types,
     ti.ticket_ids,
     ts.priority_date,
