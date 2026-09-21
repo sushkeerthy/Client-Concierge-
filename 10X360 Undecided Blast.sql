@@ -17,7 +17,7 @@ WITH cte_10x360_ud AS (
         t.purchaser_name, t.purchaser_email, t.purchaser_phone
     FROM [10XHub].[tickets] t
     WHERE t.product_name LIKE '%10X360%'
-      AND t.status IN ('undecided', 'open')
+      AND t.status IN ('undecided', 'open', 'expired')
 ),
  
 cte_scheduled_customers AS (
