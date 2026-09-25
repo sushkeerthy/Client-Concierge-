@@ -205,6 +205,7 @@ cte_tm_status_counts AS (
         COUNT(CASE WHEN LOWER(status) = 'attended'   THEN 1 END) AS TM_Attended,
         COUNT(CASE WHEN LOWER(status) = 'cancelled'  THEN 1 END) AS TM_Cancelled
     FROM IT_Data_Gateway.[10XHub].tickets
+    WHERE product_name LIKE '%Essential%'
     GROUP BY customer_id
 ),
 
