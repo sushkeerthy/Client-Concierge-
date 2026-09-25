@@ -220,6 +220,7 @@ cte_tm_status_counts AS (
         COUNT(CASE WHEN LOWER(status) = 'attended'   THEN 1 END) AS TM_Attended,
         COUNT(CASE WHEN LOWER(status) = 'cancelled'  THEN 1 END) AS TM_Cancelled
     FROM [10XHub].[tickets]
+    WHERE product_name LIKE '%10X360%'
     GROUP BY customer_id
 ),
 
