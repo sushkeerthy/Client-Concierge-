@@ -14,7 +14,7 @@ WITH cte_elite_edge_ud AS (
     SELECT t.customer_id, t.ticket_id, t.ticket_number, t.transaction_id,
         t.product_name, t.ticket_type, t.status, t.undecided_timestamp,
         t.outreach_restriction, t.registration_date, t.jarvis_nurture_enrolled_at,
-        t.purchaser_name, t.purchaser_email, t.purchaser_phone
+        t.purchaser_name, t.purchaser_email, t.purchaser_phone, t.sales_order_id
     FROM [10XHub].[tickets] t
     WHERE t.product_name LIKE '%Elite Edge%'
       AND t.status IN ('undecided', 'open', 'expired')
@@ -134,6 +134,18 @@ cte_ticket_ids AS (
     FROM (
         SELECT DISTINCT customer_id, ticket_id
         FROM cte_elite_edge_ud
+    ) deduped
+    GROUP BY customer_id
+),
+
+cte_sales_orders AS (
+    SELECT customer_id,
+        STRING_AGG(CAST(sales_order_id AS VARCHAR(50)), ', ')
+            WITHIN GROUP (ORDER BY sales_order_id) AS sales_orders
+    FROM (
+        SELECT DISTINCT customer_id, sales_order_id
+        FROM cte_elite_edge_ud
+        WHERE sales_order_id IS NOT NULL AND TRIM(sales_order_id) != ''
     ) deduped
     GROUP BY customer_id
 ),
@@ -294,6 +306,7 @@ SELECT
     CAST(COALESCE(pd.first_purchase_date, ts.reg_date) AS DATE) AS transaction_date,
     tt.ticket_types,
     ti.ticket_ids,
+    so.sales_orders,
     ts.priority_date,
     DATEDIFF(DAY, ts.priority_date, GETDATE())    AS days_in_queue,
     ts.outreach_restriction,
@@ -312,6 +325,7 @@ INNER JOIN cte_ticket_summary        ts ON ts.customer_id = ac.customer_id
 LEFT JOIN  cte_purchase_dates        pd ON pd.customer_id = ac.customer_id
 LEFT JOIN  cte_ticket_types          tt ON tt.customer_id = ac.customer_id
 LEFT JOIN  cte_ticket_ids            ti ON ti.customer_id = ac.customer_id
+LEFT JOIN  cte_sales_orders          so ON so.customer_id = ac.customer_id
 LEFT JOIN  cte_last_activity         la ON la.customer_id = ac.customer_id
 LEFT JOIN  cte_scheduled_customers   sc ON sc.customer_id = ac.customer_id
 LEFT JOIN  cte_10x360_customers      tx ON tx.customer_id = ac.customer_id
