@@ -259,6 +259,11 @@ cte_ticket_detail_summary AS (
 SELECT
     ci.business_name, ci.cv_customer_id,
     ac.contact_name, ac.contact_email, ac.contact_phone, ac.contact_source,
+    CASE
+        WHEN tm.TM_Open + tm.TM_Undecided = 0 THEN 'Expired Only'
+        WHEN tm.TM_Expired = 0                THEN 'Open/Undecided Only'
+        ELSE 'Open/Undecided + Expired'
+    END AS ticket_status_group,
     ts.ticket_count, CAST(td2.transaction_date AS DATE) AS transaction_date, tt.ticket_types, ti.ticket_ids, so.sales_orders,
     ts.priority_date,
     DATEDIFF(DAY, ts.priority_date, GETDATE()) AS days_in_queue,
