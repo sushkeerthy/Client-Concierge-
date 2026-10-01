@@ -51,17 +51,6 @@ cte_10x360_customers AS (
     WHERE st.ItemName LIKE '%10X360%'
 ),
 
--- No cash filter: legacy 2019-2022 10X360 GL rows have no SalesOrderCashCollected
-cte_10x360_first_purchase AS (
-    SELECT f.SourceCustomerID AS customer_id,
-        MIN(f.GLDate) AS first_10x360_purchase_date
-    FROM [DWH].[FactGL] f
-    INNER JOIN [DWH].[DimProduct] dp ON dp.CVProductID = f.CVProductID
-    WHERE dp.ProductName LIKE '%10X360%'
-      AND f.GLLineID != 0
-    GROUP BY f.SourceCustomerID
-),
-
 cte_new_buyers AS (
     SELECT customer_id FROM (
         SELECT f.SourceCustomerID AS customer_id,
@@ -320,7 +309,6 @@ SELECT
     END AS ticket_status_group,
     ts.ticket_count,
     CAST(COALESCE(pd.first_purchase_date, ts.reg_date) AS DATE) AS transaction_date,
-    CAST(fx.first_10x360_purchase_date AS DATE) AS first_10x360_purchase_date,
     tt.ticket_types,
     ti.ticket_ids,
     so.sales_orders,
@@ -346,7 +334,6 @@ LEFT JOIN  cte_sales_orders          so ON so.customer_id = ac.customer_id
 LEFT JOIN  cte_last_activity         la ON la.customer_id = ac.customer_id
 LEFT JOIN  cte_scheduled_customers   sc ON sc.customer_id = ac.customer_id
 LEFT JOIN  cte_10x360_customers      tx ON tx.customer_id = ac.customer_id
-LEFT JOIN  cte_10x360_first_purchase fx ON fx.customer_id = ac.customer_id
 LEFT JOIN  cte_new_buyers            nb ON nb.customer_id = ac.customer_id
 LEFT JOIN  cte_refund_customers      rc ON rc.customer_id = ac.customer_id
 LEFT JOIN  cte_tm_status_counts      tm ON tm.customer_id = ac.customer_id
