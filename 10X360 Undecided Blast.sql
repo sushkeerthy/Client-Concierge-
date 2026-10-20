@@ -15,14 +15,14 @@ WITH cte_10x360_ud AS (
         t.product_name, t.ticket_type, t.status, t.undecided_timestamp,
         t.outreach_restriction, t.registration_date, t.jarvis_nurture_enrolled_at,
         t.purchaser_name, t.purchaser_email, t.purchaser_phone, t.sales_order_id
-    FROM [10XHub].[tickets] t
+    FROM IT_Data_Gateway.[10XHub].[tickets] t
     WHERE t.product_name LIKE '%10X360%'
       AND t.status IN ('undecided', 'open', 'expired')
 ),
  
 cte_scheduled_customers AS (
     SELECT DISTINCT customer_id
-    FROM [10XHub].[tickets]
+    FROM IT_Data_Gateway.[10XHub].[tickets]
     WHERE product_name LIKE '%10X360%'
       AND status IN ('scheduled', 'reserved')
       AND event_date > GETDATE()
@@ -30,23 +30,26 @@ cte_scheduled_customers AS (
  
 cte_new_buyers AS (
     SELECT customer_id FROM (
-        SELECT f.SourceCustomerID AS customer_id,
+        -- FactGL.SourceCustomerID is the NetSuite entity ID; map to Hub via CVCustomerID
+        SELECT c.id AS customer_id,
                MIN(f.GLDate) AS first_purchase_date
-        FROM [DWH].[FactGL] f
-        INNER JOIN [DWH].[DimProduct] dp ON dp.CVProductID = f.CVProductID
+        FROM IT_Data_Gateway.[DWH].[FactGL] f
+        INNER JOIN IT_Data_Gateway.[DWH].[DimProduct] dp ON dp.CVProductID = f.CVProductID
+        INNER JOIN IT_Data_Gateway.[10XHub].[customers] c ON c.cv_customer_id = f.CVCustomerID
         WHERE dp.ProductName LIKE '%10X360%'
           AND f.GLLineID != 0
           AND f.SalesOrderCashCollected > 0
-        GROUP BY f.SourceCustomerID
+        GROUP BY c.id
     ) first_purchases
     WHERE first_purchase_date >= DATEADD(DAY, -60, GETDATE())
 ),
  
 cte_refund_customers AS (
-    SELECT DISTINCT f.SourceCustomerID AS customer_id
-    FROM [DWH].[FactGL] f
-    INNER JOIN [DWH].[DimProduct] dp ON dp.CVProductID = f.CVProductID
-    LEFT JOIN [NetSuite].[silver_Transaction] st
+    SELECT DISTINCT c.id AS customer_id
+    FROM IT_Data_Gateway.[DWH].[FactGL] f
+    INNER JOIN IT_Data_Gateway.[DWH].[DimProduct] dp ON dp.CVProductID = f.CVProductID
+    INNER JOIN IT_Data_Gateway.[10XHub].[customers] c ON c.cv_customer_id = f.CVCustomerID
+    LEFT JOIN IT_Data_Gateway.[NetSuite].[silver_Transaction] st
         ON st.TransactionID = CAST(f.GLID AS BIGINT)
     WHERE dp.ProductName LIKE '%10X360%'
       AND f.IsGLPosting = 1
@@ -58,12 +61,13 @@ cte_refund_customers AS (
 ),
  
 cte_elite_status AS (
-    SELECT SourceCustomerID AS customer_id, Elite AS elite_tier
+    SELECT customer_id, elite_tier
     FROM (
-        SELECT SourceCustomerID, Elite,
-               ROW_NUMBER() OVER (PARTITION BY SourceCustomerID ORDER BY GLDate DESC) AS rn
-        FROM [DWH].[FactGL]
-        WHERE Elite IS NOT NULL
+        SELECT c.id AS customer_id, f.Elite AS elite_tier,
+               ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY f.GLDate DESC, f.Elite DESC) AS rn
+        FROM IT_Data_Gateway.[DWH].[FactGL] f
+        INNER JOIN IT_Data_Gateway.[10XHub].[customers] c ON c.cv_customer_id = f.CVCustomerID
+        WHERE f.Elite IS NOT NULL
     ) ranked
     WHERE rn = 1
 ),
@@ -123,7 +127,7 @@ cte_transaction_dates AS (
         ud.customer_id,
         MIN(tr.transaction_date) AS transaction_date
     FROM cte_10x360_ud ud
-    INNER JOIN [10XHub].[transactions] tr ON tr.cv_transaction_id = ud.transaction_id
+    INNER JOIN IT_Data_Gateway.[10XHub].[transactions] tr ON tr.cv_transaction_id = ud.transaction_id
     GROUP BY ud.customer_id
 ),
 
@@ -132,8 +136,8 @@ cte_last_activity AS (
     SELECT t.customer_id,
         MAX(at2.blast_date)       AS last_blast_date,
         MAX(at2.last_called_date) AS last_called_date
-    FROM [10XHub].[attendee_tickets] at2
-    INNER JOIN [10XHub].[tickets] t ON t.ticket_id = at2.ticket_id
+    FROM IT_Data_Gateway.[10XHub].[attendee_tickets] at2
+    INNER JOIN IT_Data_Gateway.[10XHub].[tickets] t ON t.ticket_id = at2.ticket_id
     WHERE t.customer_id IN (SELECT customer_id FROM cte_10x360_ud)
     GROUP BY t.customer_id
 ),
@@ -150,10 +154,11 @@ cte_contact_info AS (
             ELSE NULL
         END AS elite_status,
         dc.PRClientStatusName  AS pr_status,
-        dc.SBUClientStatusName AS sbu_status
-    FROM [10XHub].[customers] c
+        dc.SBUClientStatusName AS sbu_status,
+        dc.AnnualBusinessRevenueName AS abr
+    FROM IT_Data_Gateway.[10XHub].[customers] c
     LEFT JOIN cte_elite_status es ON es.customer_id = c.id
-    LEFT JOIN [DWH].[DimCustomer] dc ON dc.CVCustomerID = c.cv_customer_id
+    LEFT JOIN IT_Data_Gateway.[DWH].[DimCustomer] dc ON dc.CVCustomerID = c.cv_customer_id
 ),
  
 cte_all_contacts AS (
@@ -166,7 +171,8 @@ cte_all_contacts AS (
                 WHEN 'purchaser'      THEN 3
                 WHEN 'netsuite'       THEN 4
                 ELSE 5
-            END
+            END,
+            contact_email, contact_name, contact_phone
         ) AS rn
     FROM (
         SELECT DISTINCT ee.customer_id,
@@ -175,7 +181,7 @@ cte_all_contacts AS (
             CASE WHEN ee.purchaser_phone IN ('FabricImport', '') OR ee.purchaser_phone IS NULL THEN tr.purchaser_phone ELSE ee.purchaser_phone END AS contact_phone,
             'purchaser' AS contact_source
         FROM cte_10x360_ud ee
-        LEFT JOIN [10XHub].[transactions] tr
+        LEFT JOIN IT_Data_Gateway.[10XHub].[transactions] tr
             ON tr.cv_transaction_id = ee.transaction_id
         WHERE (ee.purchaser_email NOT IN ('FabricImport', '') AND ee.purchaser_email IS NOT NULL)
            OR (tr.purchaser_email  NOT IN ('FabricImport', '') AND tr.purchaser_email  IS NOT NULL)
@@ -184,7 +190,7 @@ cte_all_contacts AS (
  
         SELECT DISTINCT a.customer_id,
             a.attendee_name, a.attendee_email, a.attendee_phone, 'attendee'
-        FROM [10XHub].[attendees] a
+        FROM IT_Data_Gateway.[10XHub].[attendees] a
         INNER JOIN cte_10x360_ud ee ON ee.customer_id = a.customer_id
         WHERE a.attendee_email IS NOT NULL
           AND a.attendee_email NOT LIKE '%+placeholder@%'
@@ -197,9 +203,9 @@ cte_all_contacts AS (
             se.Phone             COLLATE Latin1_General_100_CI_AS_KS_WS_SC_UTF8,
             'netsuite'
         FROM cte_10x360_ud ee
-        INNER JOIN [10XHub].[customers] c     ON c.id = ee.customer_id
-        INNER JOIN [DWH].[DimCustomer] dc     ON dc.CVCustomerID = c.cv_customer_id
-        INNER JOIN [NetSuite].[silver_Entity] se ON se.EntityID = dc.NetSuiteID
+        INNER JOIN IT_Data_Gateway.[10XHub].[customers] c     ON c.id = ee.customer_id
+        INNER JOIN IT_Data_Gateway.[DWH].[DimCustomer] dc     ON dc.CVCustomerID = c.cv_customer_id
+        INNER JOIN IT_Data_Gateway.[NetSuite].[silver_Entity] se ON se.EntityID = dc.NetSuiteID
         WHERE se.Email IS NOT NULL AND se.Email != ''
  
         UNION ALL
@@ -211,9 +217,9 @@ cte_all_contacts AS (
             dp.Phone       COLLATE Latin1_General_100_CI_AS_KS_WS_SC_UTF8,
             'business_owner'
         FROM cte_10x360_ud ee
-        INNER JOIN [10XHub].[customers] c         ON c.id = ee.customer_id
-        INNER JOIN [DWH].[DimCustomerContact] dcc ON dcc.Customer = c.cv_customer_id
-        INNER JOIN [DWH].[DimPerson]          dp  ON dp.CVPersonID = dcc.Person
+        INNER JOIN IT_Data_Gateway.[10XHub].[customers] c         ON c.id = ee.customer_id
+        INNER JOIN IT_Data_Gateway.[DWH].[DimCustomerContact] dcc ON dcc.Customer = c.cv_customer_id
+        INNER JOIN IT_Data_Gateway.[DWH].[DimPerson]          dp  ON dp.CVPersonID = dcc.Person
         WHERE dcc.StaffTitleName = 'Owner'
           AND dcc.IsActiveName   = 'Yes'
           AND dp.Email IS NOT NULL AND dp.Email != ''
@@ -231,7 +237,7 @@ cte_tm_status_counts AS (
         COUNT(CASE WHEN LOWER(status) = 'reserved'   THEN 1 END) AS TM_Reserved,
         COUNT(CASE WHEN LOWER(status) = 'attended'   THEN 1 END) AS TM_Attended,
         COUNT(CASE WHEN LOWER(status) = 'cancelled'  THEN 1 END) AS TM_Cancelled
-    FROM [10XHub].[tickets]
+    FROM IT_Data_Gateway.[10XHub].[tickets]
     WHERE product_name LIKE '%10X360%'
     GROUP BY customer_id
 ),
@@ -262,7 +268,7 @@ cte_ticket_detail_summary AS (
                 WITHIN GROUP (ORDER BY product_name)            AS products
         FROM (
             SELECT customer_id, status, product_name, COUNT(*) AS cnt
-            FROM [10XHub].[tickets]
+            FROM IT_Data_Gateway.[10XHub].[tickets]
             WHERE LOWER(status) IN ('undecided','open','reserved','scheduled','assigned','attended','expired','cancelled')
             GROUP BY customer_id, status, product_name
         ) t
@@ -284,7 +290,7 @@ SELECT
     DATEDIFF(DAY, ts.priority_date, GETDATE()) AS days_in_queue,
     ts.outreach_restriction,
     la.last_blast_date, la.last_called_date,
-    ci.elite_status, ci.pr_status, ci.sbu_status,
+    ci.elite_status, ci.pr_status, ci.sbu_status, ci.abr,
     tm.TM_Open, tm.TM_Undecided, tm.TM_Expired, tm.TM_Assigned,
     tm.TM_Scheduled, tm.TM_Reserved, tm.TM_Attended, tm.TM_Cancelled,
     td.ticket_summary,

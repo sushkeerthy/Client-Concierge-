@@ -18,22 +18,25 @@ cte_scheduled_customers AS (
 
 cte_new_buyers AS (
     SELECT customer_id FROM (
-        SELECT f.SourceCustomerID AS customer_id,
+        -- FactGL.SourceCustomerID is the NetSuite entity ID; map to Hub via CVCustomerID
+        SELECT c.id AS customer_id,
                MIN(f.GLDate) AS first_purchase_date
         FROM IT_Data_Gateway.DWH.FactGL f
         INNER JOIN IT_Data_Gateway.DWH.DimProduct dp ON dp.CVProductID = f.CVProductID
+        INNER JOIN IT_Data_Gateway.[10XHub].customers c ON c.cv_customer_id = f.CVCustomerID
         WHERE dp.ProductName LIKE '%Essential%'
           AND f.GLLineID != 0
           AND f.SalesOrderCashCollected > 0
-        GROUP BY f.SourceCustomerID
+        GROUP BY c.id
     ) first_purchases
     WHERE first_purchase_date >= DATEADD(DAY, -60, GETDATE())
 ),
 
 cte_refund_customers AS (
-    SELECT DISTINCT f.SourceCustomerID AS customer_id
+    SELECT DISTINCT c.id AS customer_id
     FROM IT_Data_Gateway.DWH.FactGL f
     INNER JOIN IT_Data_Gateway.DWH.DimProduct dp ON dp.CVProductID = f.CVProductID
+    INNER JOIN IT_Data_Gateway.[10XHub].customers c ON c.cv_customer_id = f.CVCustomerID
     LEFT JOIN IT_Data_Gateway.NetSuite.silver_Transaction st
         ON st.TransactionID = CAST(f.GLID AS BIGINT)
     WHERE dp.ProductName LIKE '%Essential%'
@@ -46,12 +49,13 @@ cte_refund_customers AS (
 ),
 
 cte_elite_status AS (
-    SELECT SourceCustomerID AS customer_id, Elite AS elite_tier
+    SELECT customer_id, elite_tier
     FROM (
-        SELECT SourceCustomerID, Elite,
-               ROW_NUMBER() OVER (PARTITION BY SourceCustomerID ORDER BY GLDate DESC) AS rn
-        FROM IT_Data_Gateway.DWH.FactGL
-        WHERE Elite IS NOT NULL
+        SELECT c.id AS customer_id, f.Elite AS elite_tier,
+               ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY f.GLDate DESC, f.Elite DESC) AS rn
+        FROM IT_Data_Gateway.DWH.FactGL f
+        INNER JOIN IT_Data_Gateway.[10XHub].customers c ON c.cv_customer_id = f.CVCustomerID
+        WHERE f.Elite IS NOT NULL
     ) ranked
     WHERE rn = 1
 ),
@@ -136,7 +140,8 @@ cte_contact_info AS (
             ELSE NULL
         END AS elite_status,
         dc.PRClientStatusName  AS pr_status,
-        dc.SBUClientStatusName AS sbu_status
+        dc.SBUClientStatusName AS sbu_status,
+        dc.AnnualBusinessRevenueName AS abr
     FROM IT_Data_Gateway.[10XHub].customers c
     LEFT JOIN cte_elite_status es ON es.customer_id = c.id
     LEFT JOIN IT_Data_Gateway.DWH.DimCustomer dc ON dc.CVCustomerID = c.cv_customer_id
@@ -152,7 +157,8 @@ cte_all_contacts AS (
                 WHEN 'purchaser'      THEN 3
                 WHEN 'netsuite'       THEN 4
                 ELSE 5
-            END
+            END,
+            contact_email, contact_name, contact_phone
         ) AS rn
     FROM (
         SELECT DISTINCT ee.customer_id,
@@ -269,7 +275,7 @@ SELECT
     DATEDIFF(DAY, ts.priority_date, GETDATE()) AS days_in_queue,
     ts.outreach_restriction,
     la.last_blast_date, la.last_called_date,
-    ci.elite_status, ci.pr_status, ci.sbu_status,
+    ci.elite_status, ci.pr_status, ci.sbu_status, ci.abr,
     tm.TM_Open, tm.TM_Undecided, tm.TM_Expired, tm.TM_Assigned,
     tm.TM_Scheduled, tm.TM_Reserved, tm.TM_Attended, tm.TM_Cancelled,
     td.ticket_summary,
