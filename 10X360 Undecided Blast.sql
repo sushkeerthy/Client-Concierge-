@@ -28,22 +28,6 @@ cte_scheduled_customers AS (
       AND event_date > GETDATE()
 ),
  
-cte_new_buyers AS (
-    SELECT customer_id FROM (
-        -- FactGL.SourceCustomerID is the NetSuite entity ID; map to Hub via CVCustomerID
-        SELECT c.id AS customer_id,
-               MIN(f.GLDate) AS first_purchase_date
-        FROM IT_Data_Gateway.[DWH].[FactGL] f
-        INNER JOIN IT_Data_Gateway.[DWH].[DimProduct] dp ON dp.CVProductID = f.CVProductID
-        INNER JOIN IT_Data_Gateway.[10XHub].[customers] c ON c.cv_customer_id = f.CVCustomerID
-        WHERE dp.ProductName LIKE '%10X360%'
-          AND f.GLLineID != 0
-          AND f.SalesOrderCashCollected > 0
-        GROUP BY c.id
-    ) first_purchases
-    WHERE first_purchase_date >= DATEADD(DAY, -60, GETDATE())
-),
- 
 cte_refund_customers AS (
     SELECT DISTINCT c.id AS customer_id
     FROM IT_Data_Gateway.[DWH].[FactGL] f
@@ -285,12 +269,10 @@ LEFT JOIN  cte_sales_orders          so  ON so.customer_id  = ac.customer_id
 LEFT JOIN  cte_last_activity         la  ON la.customer_id  = ac.customer_id
 LEFT JOIN  cte_transaction_dates     td2 ON td2.customer_id = ac.customer_id
 LEFT JOIN  cte_scheduled_customers   sc  ON sc.customer_id  = ac.customer_id
-LEFT JOIN  cte_new_buyers            nb  ON nb.customer_id  = ac.customer_id
 LEFT JOIN  cte_refund_customers      rc  ON rc.customer_id  = ac.customer_id
 LEFT JOIN  cte_tm_status_counts      tm  ON tm.customer_id  = ac.customer_id
 LEFT JOIN  cte_ticket_detail_summary td  ON td.customer_id  = ac.customer_id
 WHERE ac.rn = 1
   AND sc.customer_id IS NULL
-  AND nb.customer_id IS NULL
   AND rc.customer_id IS NULL
 ORDER BY ts.priority_date ASC;

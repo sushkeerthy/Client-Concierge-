@@ -130,7 +130,7 @@ def reference_sets(cfg):
     return refs
 
 
-EXCLUSIONS = ["scheduled", "new_buyer", "refund", "has_10x360"]
+EXCLUSIONS = ["scheduled", "refund", "has_10x360"]
 
 
 def exclusion_reasons(cv, refs):
@@ -173,6 +173,11 @@ def test_query(name, cfg, baseline, out_dir, rep, test_ref=None):
     for k in [e for e in EXCLUSIONS if e in refs]:
         leaked = out & refs[k]
         rep.check(f"no '{k}' customers on the list", not leaked, f"{len(leaked)}: {sample(leaked)}" if leaked else "")
+
+    eligible_new = (refs["new_buyer"] & refs["ud"] & refs["has_contact"]) - set().union(
+        *(refs[k] for k in EXCLUSIONS if k in refs))
+    rep.check("first-time buyers from the last 60 days are included", eligible_new <= out,
+              f"{len(eligible_new)} eligible, {len(eligible_new - out)} missing")
 
     excluded = set().union(*(refs[k] for k in EXCLUSIONS if k in refs))
     expected = (refs["ud"] - excluded) & refs["has_contact"]
