@@ -34,7 +34,7 @@ QUERIES = {
     "Elite Edge": {"file": "Elite Edge Undecided Blast.sql", "like": "%Elite Edge%", "excl_10x360": True},
 }
 
-ELITE_MAP = {"3": "ELITE125", "4": "ELITE250", "ELITE125": "ELITE125", "ELITE250": "ELITE250"}
+ELITE_MAP = {"3": "E125", "4": "E250"}
 
 
 def run(sql):
@@ -124,13 +124,9 @@ def reference_sets(cfg):
             SELECT dc.CVCustomerID FROM {NS}.silver_Transaction st
             INNER JOIN {DWH}.DimCustomer dc ON dc.NetSuiteID = st.EntityID
             WHERE st.ItemName LIKE '%10X360%'""")
-    elite = run(f"""
-        SELECT cv, elite FROM (
-            SELECT f.CVCustomerID AS cv, f.Elite AS elite,
-                   ROW_NUMBER() OVER (PARTITION BY f.CVCustomerID ORDER BY f.GLDate DESC, f.Elite DESC) AS rn
-            FROM {DWH}.FactGL f WHERE f.Elite IS NOT NULL AND f.CVCustomerID IS NOT NULL) x
-        WHERE rn = 1""")
-    refs["elite"] = {r["cv"]: ELITE_MAP.get(str(r["elite"])) for r in elite}
+    # DimCustomer.EliteStatus is the master; FactGL.Elite is only a per-transaction tag
+    elite = run(f"SELECT CVCustomerID AS cv, EliteStatus AS s FROM {DWH}.DimCustomer")
+    refs["elite"] = {r["cv"]: ELITE_MAP.get(str(r["s"])) for r in elite}
     return refs
 
 
@@ -192,10 +188,11 @@ def test_query(name, cfg, baseline, out_dir, rep, test_ref=None):
             bad_flag.append(r["cv_customer_id"])
     rep.check("ticket_status_group matches TM counts", not bad_flag, sample(bad_flag))
 
-    elite_rows = [r for r in rows if refs["elite"].get(r["cv_customer_id"])]
-    bad_elite = [r["cv_customer_id"] for r in elite_rows if r["elite_status"] != refs["elite"][r["cv_customer_id"]]]
-    rep.check("elite_status matches latest DWH Elite tier", not bad_elite,
-              f"compared {len(elite_rows)} rows" + (f"; mismatched: {sample(bad_elite)}" if bad_elite else ""))
+    bad_elite = [r["cv_customer_id"] for r in rows
+                 if (r["elite_status"] or None) != refs["elite"].get(r["cv_customer_id"])]
+    n_elite = sum(1 for r in rows if refs["elite"].get(r["cv_customer_id"]))
+    rep.check("elite_status matches DimCustomer.EliteStatus on every row", not bad_elite,
+              f"{n_elite} Elite rows" + (f"; mismatched {len(bad_elite)}: {sample(bad_elite)}" if bad_elite else ""))
 
     rerun = {r["cv_customer_id"]: (r["contact_source"], r["contact_email"], r["contact_name"], r["contact_phone"])
              for r in run(sql)}

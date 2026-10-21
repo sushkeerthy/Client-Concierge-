@@ -48,18 +48,6 @@ cte_refund_customers AS (
       )
 ),
 
-cte_elite_status AS (
-    SELECT customer_id, elite_tier
-    FROM (
-        SELECT c.id AS customer_id, f.Elite AS elite_tier,
-               ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY f.GLDate DESC, f.Elite DESC) AS rn
-        FROM IT_Data_Gateway.DWH.FactGL f
-        INNER JOIN IT_Data_Gateway.[10XHub].customers c ON c.cv_customer_id = f.CVCustomerID
-        WHERE f.Elite IS NOT NULL
-    ) ranked
-    WHERE rn = 1
-),
-
 cte_ticket_summary AS (
     SELECT
         customer_id,
@@ -132,18 +120,11 @@ cte_contact_info AS (
     SELECT c.id AS customer_id,
         c.name AS business_name,
         c.cv_customer_id,
-        CASE COALESCE(es.elite_tier, c.status)
-            WHEN '3'        THEN 'ELITE125'
-            WHEN '4'        THEN 'ELITE250'
-            WHEN 'ELITE125' THEN 'ELITE125'
-            WHEN 'ELITE250' THEN 'ELITE250'
-            ELSE NULL
-        END AS elite_status,
+        dc.EliteStatusName     AS elite_status,
         dc.PRClientStatusName  AS pr_status,
         dc.SBUClientStatusName AS sbu_status,
         dc.AnnualBusinessRevenueName AS abr
     FROM IT_Data_Gateway.[10XHub].customers c
-    LEFT JOIN cte_elite_status es ON es.customer_id = c.id
     LEFT JOIN IT_Data_Gateway.DWH.DimCustomer dc ON dc.CVCustomerID = c.cv_customer_id
 ),
 
