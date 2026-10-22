@@ -89,11 +89,12 @@ cte_sales_orders AS (
     GROUP BY customer_id
 ),
 
--- Blasts and calls on any of the business's tickets, all products
 cte_last_activity AS (
     SELECT t.customer_id,
-        MAX(at2.blast_date)       AS last_blast_date,
-        MAX(at2.last_called_date) AS last_called_date
+        MAX(CASE WHEN t.product_name LIKE '%10X360%' THEN at2.blast_date END)       AS last_blast_this_product,
+        MAX(CASE WHEN t.product_name LIKE '%10X360%' THEN at2.last_called_date END) AS last_called_this_product,
+        MAX(at2.blast_date)                                                      AS last_blast_all_products,
+        MAX(at2.last_called_date)                                                AS last_called_all_products
     FROM IT_Data_Gateway.[10XHub].[attendee_tickets] at2
     INNER JOIN IT_Data_Gateway.[10XHub].[tickets] t ON t.ticket_id = at2.ticket_id
     WHERE t.customer_id IN (SELECT customer_id FROM cte_tickets)
@@ -120,7 +121,9 @@ cte_contact_info AS (
         dc.EliteStatusName           AS elite_status,
         dc.PRClientStatusName        AS pr_status,
         dc.SBUClientStatusName       AS sbu_status,
-        dc.AnnualBusinessRevenueName AS abr
+        dc.AnnualBusinessRevenueName AS abr,
+        dc.VerticalName              AS vertical,
+        dc.SubVerticalName           AS sub_vertical
     FROM IT_Data_Gateway.[10XHub].[customers] c
     LEFT JOIN IT_Data_Gateway.[DWH].[DimCustomer] dc ON dc.CVCustomerID = c.cv_customer_id
 ),
@@ -190,8 +193,44 @@ cte_all_contacts AS (
     ) all_contacts
 ),
 
+-- Tickets for this product, grouped by status
+cte_summary_this_product AS (
+    SELECT
+        customer_id,
+        STRING_AGG(status_group + ': ' + products, ' | ') WITHIN GROUP (ORDER BY
+            CASE status_group
+                WHEN 'undecided'         THEN 1
+                WHEN 'undecided_at_sale' THEN 2
+                WHEN 'open'              THEN 3
+                WHEN 'reserved'          THEN 4
+                WHEN 'scheduled'         THEN 5
+                WHEN 'assigned'          THEN 6
+                WHEN 'attended'          THEN 7
+                WHEN 'no show'           THEN 8
+                WHEN 'expired'           THEN 9
+                WHEN 'cancelled'         THEN 10
+                ELSE 11
+            END
+        ) AS ticket_summary
+    FROM (
+        SELECT customer_id, status_group,
+            STRING_AGG(product_name + ' x' + CAST(cnt AS VARCHAR(10)), ', ')
+                WITHIN GROUP (ORDER BY product_name) AS products
+        FROM (
+            SELECT customer_id, LOWER(status) AS status_group, product_name, COUNT(*) AS cnt
+            FROM IT_Data_Gateway.[10XHub].[tickets]
+            WHERE is_deleted = 0
+              AND customer_id IN (SELECT customer_id FROM cte_tickets)
+              AND product_name LIKE '%10X360%'
+            GROUP BY customer_id, LOWER(status), product_name
+        ) t
+        GROUP BY customer_id, status_group
+    ) sg
+    GROUP BY customer_id
+),
+
 -- Every ticket the business holds, all products
-cte_ticket_detail_summary AS (
+cte_summary_all_products AS (
     SELECT
         customer_id,
         STRING_AGG(status_group + ': ' + products, ' | ') WITHIN GROUP (ORDER BY
@@ -249,13 +288,21 @@ SELECT
     ci.pr_status,
     ci.sbu_status,
     ci.abr,
+    ci.vertical,
+    ci.sub_vertical,
     ts.outreach_restriction,
-    la.last_blast_date,
-    la.last_called_date,
+    la.last_blast_this_product,
+    la.last_called_this_product,
     DATEDIFF(DAY,
-        CASE WHEN la.last_called_date IS NULL OR la.last_blast_date > la.last_called_date
-             THEN la.last_blast_date ELSE la.last_called_date END,
-        GETDATE()) AS days_since_last_touch,
+        CASE WHEN la.last_called_this_product IS NULL OR la.last_blast_this_product > la.last_called_this_product
+             THEN la.last_blast_this_product ELSE la.last_called_this_product END,
+        GETDATE()) AS days_since_last_touch_this_product,
+    la.last_blast_all_products,
+    la.last_called_all_products,
+    DATEDIFF(DAY,
+        CASE WHEN la.last_called_all_products IS NULL OR la.last_blast_all_products > la.last_called_all_products
+             THEN la.last_blast_all_products ELSE la.last_called_all_products END,
+        GETDATE()) AS days_since_last_touch_all_products,
 
     -- Contact (one per business)
     ac.contact_name,
@@ -273,7 +320,8 @@ SELECT
     tt.ticket_types,
     ti.ticket_ids,
     so.sales_orders,
-    td.ticket_summary,
+    sp.ticket_summary AS ticket_summary_this_product,
+    sa.ticket_summary AS ticket_summary_all_products,
     GETDATE() AS list_generated_at
 FROM cte_all_contacts ac
 INNER JOIN cte_contact_info          ci ON ci.customer_id = ac.customer_id
@@ -284,6 +332,7 @@ LEFT JOIN  cte_ticket_ids            ti ON ti.customer_id = ac.customer_id
 LEFT JOIN  cte_sales_orders          so ON so.customer_id = ac.customer_id
 LEFT JOIN  cte_last_activity         la ON la.customer_id = ac.customer_id
 LEFT JOIN  cte_10x360_first_purchase fx ON fx.customer_id = ac.customer_id
-LEFT JOIN  cte_ticket_detail_summary td ON td.customer_id = ac.customer_id
+LEFT JOIN  cte_summary_this_product  sp ON sp.customer_id = ac.customer_id
+LEFT JOIN  cte_summary_all_products  sa ON sa.customer_id = ac.customer_id
 WHERE ac.rn = 1
 ORDER BY ts.priority_date ASC;

@@ -126,8 +126,18 @@ def reference(cfg):
           AND f.CVCustomerID IS NOT NULL
         GROUP BY f.CVCustomerID""")}
     # DimCustomer.EliteStatus is the master; FactGL.Elite is only a per-transaction tag
-    elite = {r["cv"]: ELITE_MAP.get(str(r["s"])) for r in run(f"SELECT CVCustomerID cv, EliteStatus s FROM {DWH}.DimCustomer")}
-    return per_cv, has_contact, first_10x360, elite
+    dim = {r["cv"]: r for r in run(f"SELECT CVCustomerID cv, EliteStatus s, VerticalName v, SubVerticalName sv FROM {DWH}.DimCustomer")}
+    elite = {cv: ELITE_MAP.get(str(r["s"])) for cv, r in dim.items()}
+    touches = {r["cv"]: r for r in run(f"""
+        SELECT c.cv_customer_id cv,
+               MAX(CASE WHEN t.product_name LIKE '{like}' THEN at2.blast_date END) bp,
+               MAX(CASE WHEN t.product_name LIKE '{like}' THEN at2.last_called_date END) cp,
+               MAX(at2.blast_date) ba, MAX(at2.last_called_date) ca
+        FROM {HUB}.attendee_tickets at2
+        INNER JOIN {HUB}.tickets t ON t.ticket_id = at2.ticket_id
+        INNER JOIN {HUB}.customers c ON c.id = t.customer_id
+        GROUP BY c.cv_customer_id""")}
+    return per_cv, has_contact, first_10x360, elite, dim, touches
 
 
 class Report:
@@ -155,7 +165,7 @@ def test_query(name, cfg, baseline, out_dir, rep, test_ref=None):
     print(f"\n=== {name} Tickets{f' @ {test_ref}' if test_ref else ''} ===")
     sql = load_sql(cfg, test_ref)
     rows = run(sql)
-    per_cv, has_contact, first_10x360, elite = reference(cfg)
+    per_cv, has_contact, first_10x360, elite, dim, touches = reference(cfg)
     cvs = [r["cv_customer_id"] for r in rows]
     out = set(cvs)
 
@@ -171,8 +181,11 @@ def test_query(name, cfg, baseline, out_dir, rep, test_ref=None):
               f"missing {len(missing)} [{sample(missing)}], extra {len(extra)} [{sample(extra)}]")
 
     rows = [r for r in rows if r["cv_customer_id"] in per_cv]
-    if not rows or "TM_NoShow" not in rows[0]:
-        rep.check("has the new ticket-list columns", False, "old layout")
+    required = ["TM_NoShow", "vertical", "sub_vertical", "last_blast_this_product", "last_blast_all_products",
+                "ticket_summary_this_product", "ticket_summary_all_products", "first_10x360_purchase_date"]
+    absent = [c for c in required if not rows or c not in rows[0]]
+    rep.check("has every ticket-list column", not absent, f"missing: {', '.join(absent)}" if absent else "")
+    if absent:
         return
 
     bad = mismatches(rows, lambda r: all((r[col] or 0) == per_cv[r["cv_customer_id"]]["counts"][st]
@@ -210,13 +223,34 @@ def test_query(name, cfg, baseline, out_dir, rep, test_ref=None):
     bad = mismatches(rows, lambda r: (r["elite_status"] or None) == elite.get(r["cv_customer_id"]))
     rep.check("elite_status matches DimCustomer.EliteStatus on every row", not bad, sample(bad))
 
+    def vertical_ok(r):
+        d = dim.get(r["cv_customer_id"]) or {}
+        return (r["vertical"] or None) == (d.get("v") or None) and (r["sub_vertical"] or None) == (d.get("sv") or None)
+    bad = mismatches(rows, vertical_ok)
+    rep.check("vertical and sub_vertical match DimCustomer on every row", not bad, sample(bad))
+
+    def touch_ok(r):
+        t = touches.get(r["cv_customer_id"]) or {}
+        return (str(r["last_blast_this_product"]) == str(t.get("bp"))
+                and str(r["last_called_this_product"]) == str(t.get("cp"))
+                and str(r["last_blast_all_products"]) == str(t.get("ba"))
+                and str(r["last_called_all_products"]) == str(t.get("ca")))
+    bad = mismatches(rows, touch_ok)
+    rep.check("blast and call dates (this product and all products) match the Hub", not bad, sample(bad))
+
+    def summary_ok(r):
+        s = r["ticket_summary_this_product"] or ""
+        return sum(int(n) for n in re.findall(r" x(\d+)", s)) == r["ticket_count"]
+    bad = mismatches(rows, summary_ok)
+    rep.check("ticket_summary_this_product adds up to ticket_count", not bad, sample(bad))
+
     rerun = {r["cv_customer_id"]: (r["contact_source"], r["contact_email"], r["contact_name"], r["contact_phone"])
              for r in run(sql)}
     changed = {r["cv_customer_id"] for r in rows
                if rerun.get(r["cv_customer_id"]) != (r["contact_source"], r["contact_email"], r["contact_name"], r["contact_phone"])}
     rep.check("same contacts on a second run", not changed, sample(changed))
 
-    for col in ["contact_email", "abr", "elite_status", "first_purchase_date"]:
+    for col in ["contact_email", "abr", "vertical", "elite_status", "first_purchase_date", "last_blast_this_product"]:
         blank = sum(1 for r in rows if not r.get(col))
         rep.info(f"blank {col}", f"{blank} of {len(rows)} ({blank / len(rows):.0%})")
     groups = Counter(r["ticket_status_group"] for r in rows)
