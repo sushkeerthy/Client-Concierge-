@@ -1,4 +1,4 @@
-"""Run the product ticket-list queries against Fabric and verify their output.
+"""Run the Customer Tickets queries (10X360, Essentials, Elite Edge) against Fabric and verify their output.
 
 Each query file is executed exactly as stored. Its output is checked against
 figures computed independently, keyed on CV customer ID throughout.
@@ -31,17 +31,45 @@ WORKSPACE, LAKEHOUSE = "Bizops.IT_Data_Gateway.Lakehouse", "IT_Data_Gateway"
 HUB, DWH, NS = "IT_Data_Gateway.[10XHub]", "IT_Data_Gateway.DWH", "IT_Data_Gateway.NetSuite"
 
 QUERIES = {
-    "10X360":     {"file": "10X360 Tickets.sql",     "old_file": "10X360 Undecided Blast.sql",     "like": "%10X360%"},
-    "Essentials": {"file": "Essentials Tickets.sql", "old_file": "Essentials Undecided Blast.sql", "like": "%Essential%"},
-    "Elite Edge": {"file": "Elite Edge Tickets.sql", "old_file": "Elite Edge Undecided Blast.sql", "like": "%Elite Edge%"},
+    "10X360":     {"file": "10X360 Customer Tickets.sql",     "old_file": "10X360 Tickets.sql",     "like": "%10X360%"},
+    "Essentials": {"file": "Essentials Customer Tickets.sql", "old_file": "Essentials Tickets.sql", "like": "%Essential%"},
+    "Elite Edge": {"file": "Elite Edge Customer Tickets.sql", "old_file": "Elite Edge Tickets.sql", "like": "%Elite Edge%"},
 }
 
 ELITE_MAP = {"3": "E125", "4": "E250"}
-STATUS_COLS = {"open": "TM_Open", "undecided": "TM_Undecided", "undecided_at_sale": "TM_UndecidedAtSale",
-               "expired": "TM_Expired", "assigned": "TM_Assigned", "scheduled": "TM_Scheduled",
-               "reserved": "TM_Reserved", "attended": "TM_Attended", "no show": "TM_NoShow",
-               "cancelled": "TM_Cancelled"}
+STATUS_COLS = {"open": "Open Tickets", "undecided": "Undecided Tickets", "undecided_at_sale": "Undecided at Sale Tickets",
+               "expired": "Expired Tickets", "assigned": "Assigned Tickets", "scheduled": "Scheduled Tickets",
+               "reserved": "Reserved Tickets", "attended": "Attended Tickets", "no show": "No Show Tickets",
+               "cancelled": "Cancelled Tickets"}
 UNSCHEDULED = ("open", "undecided", "undecided_at_sale", "expired")
+CV = "CV Customer ID"
+
+# Agreed column layout, identical on all three lists
+EXPECTED_COLUMNS = [
+    "Business Name", "CV Customer ID",
+    "Contact Name", "Contact Email", "Contact Phone", "Contact Source",
+    "Unscheduled Ticket Group", "Total Tickets", "Unscheduled Tickets", *STATUS_COLS.values(),
+    "First Purchase Date", "Latest Purchase Date", "Days Since Latest Purchase", "Next Event Date",
+    "Last Attended Event Date",
+    "Outreach Restriction", "Last Blast (This Product)", "Last Call (This Product)",
+    "Days Since Last Contact (This Product)", "Last Blast (All Products)", "Last Call (All Products)",
+    "Days Since Last Contact (All Products)",
+    "Elite Status", "PR Client Status", "SBU Client Status", "Annual Business Revenue", "Vertical", "Sub-Vertical",
+    "10X360 Customer", "First 10X360 Purchase Date",
+    "Queue Start Date", "Days in Queue", "Ticket Types", "Ticket IDs", "Sales Order Numbers",
+    "Ticket Summary (This Product)", "Ticket Summary (All Products)", "Generated At",
+]
+
+
+def run_with_columns(sql):
+    conn = connect(WORKSPACE, LAKEHOUSE)
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        cols = [d[0] for d in cur.description]
+        return cols, [dict(zip(cols, r)) for r in cur.fetchall()]
+    finally:
+        conn.close()
 
 
 def run(sql):
@@ -158,19 +186,31 @@ def sample(items, n=5):
 
 
 def mismatches(rows, fn):
-    return {r["cv_customer_id"] for r in rows if not fn(r)}
+    return {r[CV] for r in rows if not fn(r)}
+
+
+def business_ids(rows):
+    return {r.get(CV) or r.get("cv_customer_id") for r in rows}
 
 
 def test_query(name, cfg, baseline, out_dir, rep, test_ref=None):
-    print(f"\n=== {name} Tickets{f' @ {test_ref}' if test_ref else ''} ===")
+    print(f"\n=== {name} Customer Tickets{f' @ {test_ref}' if test_ref else ''} ===")
     sql = load_sql(cfg, test_ref)
-    rows = run(sql)
+    columns, rows = run_with_columns(sql)
+
+    rep.check("columns match the agreed names and order", columns == EXPECTED_COLUMNS,
+              "" if columns == EXPECTED_COLUMNS else
+              f"missing: {[c for c in EXPECTED_COLUMNS if c not in columns]}, "
+              f"unexpected: {[c for c in columns if c not in EXPECTED_COLUMNS]}")
+    if any(c not in columns for c in EXPECTED_COLUMNS):
+        return columns
+
     per_cv, has_contact, first_10x360, elite, dim, touches = reference(cfg)
-    cvs = [r["cv_customer_id"] for r in rows]
+    cvs = [r[CV] for r in rows]
     out = set(cvs)
 
     rep.check("returns rows", len(rows) > 0, f"{len(rows)} rows")
-    rep.check("no NULL cv_customer_id", None not in out)
+    rep.check("no blank CV Customer ID", None not in out)
     dupes = {c for c, n in Counter(cvs).items() if n > 1}
     rep.check("one row per business", not dupes, sample(dupes))
 
@@ -179,86 +219,78 @@ def test_query(name, cfg, baseline, out_dir, rep, test_ref=None):
     rep.check("every business with any ticket for the product (and a contact) is listed, nothing else",
               not missing and not extra,
               f"missing {len(missing)} [{sample(missing)}], extra {len(extra)} [{sample(extra)}]")
+    rows = [r for r in rows if r[CV] in per_cv]
 
-    rows = [r for r in rows if r["cv_customer_id"] in per_cv]
-    required = ["TM_NoShow", "vertical", "sub_vertical", "last_blast_this_product", "last_blast_all_products",
-                "ticket_summary_this_product", "ticket_summary_all_products", "first_10x360_purchase_date"]
-    absent = [c for c in required if not rows or c not in rows[0]]
-    rep.check("has every ticket-list column", not absent, f"missing: {', '.join(absent)}" if absent else "")
-    if absent:
-        return
-
-    bad = mismatches(rows, lambda r: all((r[col] or 0) == per_cv[r["cv_customer_id"]]["counts"][st]
-                                         for st, col in STATUS_COLS.items()))
+    bad = mismatches(rows, lambda r: all((r[col] or 0) == per_cv[r[CV]]["counts"][st] for st, col in STATUS_COLS.items()))
     rep.check("status counts match the Hub on every row", not bad, sample(bad))
-    bad = mismatches(rows, lambda r: r["ticket_count"] == sum(r[c] or 0 for c in STATUS_COLS.values()))
-    rep.check("status counts add up to ticket_count", not bad, sample(bad))
-    bad = mismatches(rows, lambda r: r["unscheduled_tickets"] == sum(r[STATUS_COLS[s]] or 0 for s in UNSCHEDULED))
-    rep.check("unscheduled_tickets = open + undecided + undecided-at-sale + expired", not bad, sample(bad))
+    bad = mismatches(rows, lambda r: r["Total Tickets"] == sum(r[c] or 0 for c in STATUS_COLS.values()))
+    rep.check("status counts add up to Total Tickets", not bad, sample(bad))
+    bad = mismatches(rows, lambda r: r["Unscheduled Tickets"] == sum(r[STATUS_COLS[s]] or 0 for s in UNSCHEDULED))
+    rep.check("Unscheduled Tickets = open + undecided + undecided at sale + expired", not bad, sample(bad))
 
     def group_ok(r):
-        ou = (r["TM_Open"] or 0) + (r["TM_Undecided"] or 0) + (r["TM_UndecidedAtSale"] or 0)
-        ex = r["TM_Expired"] or 0
+        ou = sum(r[STATUS_COLS[s]] or 0 for s in ("open", "undecided", "undecided_at_sale"))
+        ex = r["Expired Tickets"] or 0
         want = ("No Open/Undecided/Expired" if ou + ex == 0 else "Expired Only" if ou == 0
                 else "Open/Undecided Only" if ex == 0 else "Open/Undecided + Expired")
-        return r["ticket_status_group"] == want
+        return r["Unscheduled Ticket Group"] == want
     bad = mismatches(rows, group_ok)
-    rep.check("ticket_status_group matches the counts", not bad, sample(bad))
+    rep.check("Unscheduled Ticket Group matches the counts", not bad, sample(bad))
 
     def dates_ok(r):
-        p = per_cv[r["cv_customer_id"]]
-        return (as_date(r["first_purchase_date"]) == (min(p["bought"]) if p["bought"] else None)
-                and as_date(r["latest_purchase_date"]) == (max(p["bought"]) if p["bought"] else None)
-                and as_date(r["next_event_date"]) == (min(p["next"]) if p["next"] else None)
-                and as_date(r["last_attended_date"]) == (max(p["attended"]) if p["attended"] else None))
+        p = per_cv[r[CV]]
+        return (as_date(r["First Purchase Date"]) == (min(p["bought"]) if p["bought"] else None)
+                and as_date(r["Latest Purchase Date"]) == (max(p["bought"]) if p["bought"] else None)
+                and as_date(r["Next Event Date"]) == (min(p["next"]) if p["next"] else None)
+                and as_date(r["Last Attended Event Date"]) == (max(p["attended"]) if p["attended"] else None))
     bad = mismatches(rows, dates_ok)
     rep.check("purchase dates, next event and last attended match the Hub", not bad, sample(bad))
 
-    bad = mismatches(rows, lambda r: as_date(r["first_10x360_purchase_date"]) == first_10x360.get(r["cv_customer_id"])
-                     and r["is_10x360_customer"] == ("Yes" if r["cv_customer_id"] in first_10x360 else "No"))
-    n10 = sum(1 for r in rows if r["cv_customer_id"] in first_10x360)
-    rep.check("10X360 first purchase date matches the DWH on every row", not bad,
+    bad = mismatches(rows, lambda r: as_date(r["First 10X360 Purchase Date"]) == first_10x360.get(r[CV])
+                     and r["10X360 Customer"] == ("Yes" if r[CV] in first_10x360 else "No"))
+    n10 = sum(1 for r in rows if r[CV] in first_10x360)
+    rep.check("First 10X360 Purchase Date matches the DWH on every row", not bad,
               f"{n10} 10X360 customers" + (f"; mismatched: {sample(bad)}" if bad else ""))
 
-    bad = mismatches(rows, lambda r: (r["elite_status"] or None) == elite.get(r["cv_customer_id"]))
-    rep.check("elite_status matches DimCustomer.EliteStatus on every row", not bad, sample(bad))
+    bad = mismatches(rows, lambda r: (r["Elite Status"] or None) == elite.get(r[CV]))
+    rep.check("Elite Status matches DimCustomer.EliteStatus on every row", not bad, sample(bad))
 
     def vertical_ok(r):
-        d = dim.get(r["cv_customer_id"]) or {}
-        return (r["vertical"] or None) == (d.get("v") or None) and (r["sub_vertical"] or None) == (d.get("sv") or None)
+        d = dim.get(r[CV]) or {}
+        return (r["Vertical"] or None) == (d.get("v") or None) and (r["Sub-Vertical"] or None) == (d.get("sv") or None)
     bad = mismatches(rows, vertical_ok)
-    rep.check("vertical and sub_vertical match DimCustomer on every row", not bad, sample(bad))
+    rep.check("Vertical and Sub-Vertical match DimCustomer on every row", not bad, sample(bad))
 
     def touch_ok(r):
-        t = touches.get(r["cv_customer_id"]) or {}
-        return (str(r["last_blast_this_product"]) == str(t.get("bp"))
-                and str(r["last_called_this_product"]) == str(t.get("cp"))
-                and str(r["last_blast_all_products"]) == str(t.get("ba"))
-                and str(r["last_called_all_products"]) == str(t.get("ca")))
+        t = touches.get(r[CV]) or {}
+        return (str(r["Last Blast (This Product)"]) == str(t.get("bp"))
+                and str(r["Last Call (This Product)"]) == str(t.get("cp"))
+                and str(r["Last Blast (All Products)"]) == str(t.get("ba"))
+                and str(r["Last Call (All Products)"]) == str(t.get("ca")))
     bad = mismatches(rows, touch_ok)
     rep.check("blast and call dates (this product and all products) match the Hub", not bad, sample(bad))
 
     def summary_ok(r):
-        s = r["ticket_summary_this_product"] or ""
-        return sum(int(n) for n in re.findall(r" x(\d+)", s)) == r["ticket_count"]
+        s = r["Ticket Summary (This Product)"] or ""
+        return sum(int(n) for n in re.findall(r" x(\d+)", s)) == r["Total Tickets"]
     bad = mismatches(rows, summary_ok)
-    rep.check("ticket_summary_this_product adds up to ticket_count", not bad, sample(bad))
+    rep.check("Ticket Summary (This Product) adds up to Total Tickets", not bad, sample(bad))
 
-    rerun = {r["cv_customer_id"]: (r["contact_source"], r["contact_email"], r["contact_name"], r["contact_phone"])
-             for r in run(sql)}
-    changed = {r["cv_customer_id"] for r in rows
-               if rerun.get(r["cv_customer_id"]) != (r["contact_source"], r["contact_email"], r["contact_name"], r["contact_phone"])}
+    contact = ("Contact Source", "Contact Email", "Contact Name", "Contact Phone")
+    rerun = {r[CV]: tuple(r[c] for c in contact) for r in run(sql)}
+    changed = {r[CV] for r in rows if rerun.get(r[CV]) != tuple(r[c] for c in contact)}
     rep.check("same contacts on a second run", not changed, sample(changed))
 
-    for col in ["contact_email", "abr", "vertical", "elite_status", "first_purchase_date", "last_blast_this_product"]:
+    for col in ["Contact Email", "Annual Business Revenue", "Vertical", "Elite Status", "First Purchase Date",
+                "Last Blast (This Product)"]:
         blank = sum(1 for r in rows if not r.get(col))
         rep.info(f"blank {col}", f"{blank} of {len(rows)} ({blank / len(rows):.0%})")
-    groups = Counter(r["ticket_status_group"] for r in rows)
-    rep.info("ticket_status_group", ", ".join(f"{k}: {v}" for k, v in sorted(groups.items())))
+    groups = Counter(r["Unscheduled Ticket Group"] for r in rows)
+    rep.info("Unscheduled Ticket Group", ", ".join(f"{k}: {v}" for k, v in sorted(groups.items())))
     rep.info("10X360 customers", f"{n10} of {len(rows)}")
 
     if baseline:
-        old = {r["cv_customer_id"] for r in run(load_sql(cfg, baseline))}
+        old = business_ids(run(load_sql(cfg, baseline)))
         added, removed = out - old, old - out
         rep.info(f"vs {baseline}", f"{len(old)} -> {len(out)} businesses (+{len(added)} / -{len(removed)})")
         unexplained = {c for c in removed if c in expected}
@@ -272,6 +304,7 @@ def test_query(name, cfg, baseline, out_dir, rep, test_ref=None):
             for c in sorted(added):
                 w.writerow([c, "added"])
         rep.info("diff written", str(path))
+    return columns
 
 
 def main():
@@ -284,9 +317,15 @@ def main():
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     rep = Report()
+    layouts = {}
     for name, cfg in QUERIES.items():
         if not args.only or args.only == name:
-            test_query(name, cfg, args.baseline, out_dir, rep, args.test_ref)
+            layouts[name] = test_query(name, cfg, args.baseline, out_dir, rep, args.test_ref)
+    if len(layouts) > 1:
+        print("\n=== Across lists ===")
+        first = next(iter(layouts.values()))
+        rep.check("all lists have identical column names in the same order",
+                  all(cols == first for cols in layouts.values()))
     print(f"\n{'ALL CHECKS PASSED' if rep.failures == 0 else f'{rep.failures} CHECK(S) FAILED'}")
     sys.exit(1 if rep.failures else 0)
 

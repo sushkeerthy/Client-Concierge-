@@ -1,6 +1,6 @@
 -- ============================================================
--- 10X360 Tickets
--- One row per business with any 10X360 ticket in the Hub, every status included.
+-- Elite Edge Customer Tickets
+-- One row per business with any Elite Edge ticket in the Hub, every status included.
 -- No exclusions: the team filters on the columns (statuses, dates, 10X360, contact rules).
 -- ============================================================
 
@@ -11,7 +11,7 @@ WITH cte_tickets AS (
         t.sales_order_id, tr.transaction_date
     FROM IT_Data_Gateway.[10XHub].[tickets] t
     LEFT JOIN IT_Data_Gateway.[10XHub].[transactions] tr ON tr.cv_transaction_id = t.transaction_id
-    WHERE t.product_name LIKE '%10X360%'
+    WHERE t.product_name LIKE '%Elite Edge%'
       AND t.is_deleted = 0
 ),
 
@@ -56,13 +56,12 @@ cte_tm_status_counts AS (
 
 cte_ticket_types AS (
     SELECT customer_id,
-        STRING_AGG(product_name + ' x' + CAST(cnt AS VARCHAR(10)), ', ')
-            WITHIN GROUP (ORDER BY product_name) AS ticket_types
+        STRING_AGG(ticket_type, ', ') WITHIN GROUP (ORDER BY ticket_type) AS ticket_types
     FROM (
-        SELECT customer_id, product_name, COUNT(*) AS cnt
+        SELECT DISTINCT customer_id, ticket_type
         FROM cte_tickets
-        GROUP BY customer_id, product_name
-    ) counted
+        WHERE ticket_type IS NOT NULL
+    ) deduped
     GROUP BY customer_id
 ),
 
@@ -91,8 +90,8 @@ cte_sales_orders AS (
 
 cte_last_activity AS (
     SELECT t.customer_id,
-        MAX(CASE WHEN t.product_name LIKE '%10X360%' THEN at2.blast_date END)       AS last_blast_this_product,
-        MAX(CASE WHEN t.product_name LIKE '%10X360%' THEN at2.last_called_date END) AS last_called_this_product,
+        MAX(CASE WHEN t.product_name LIKE '%Elite Edge%' THEN at2.blast_date END)       AS last_blast_this_product,
+        MAX(CASE WHEN t.product_name LIKE '%Elite Edge%' THEN at2.last_called_date END) AS last_called_this_product,
         MAX(at2.blast_date)                                                      AS last_blast_all_products,
         MAX(at2.last_called_date)                                                AS last_called_all_products
     FROM IT_Data_Gateway.[10XHub].[attendee_tickets] at2
@@ -221,7 +220,7 @@ cte_summary_this_product AS (
             FROM IT_Data_Gateway.[10XHub].[tickets]
             WHERE is_deleted = 0
               AND customer_id IN (SELECT customer_id FROM cte_tickets)
-              AND product_name LIKE '%10X360%'
+              AND product_name LIKE '%Elite Edge%'
             GROUP BY customer_id, LOWER(status), product_name
         ) t
         GROUP BY customer_id, status_group
@@ -265,64 +264,77 @@ cte_summary_all_products AS (
 )
 
 SELECT
-    ci.business_name,
-    ci.cv_customer_id,
+    -- Business
+    ci.business_name                              AS [Business Name],
+    ci.cv_customer_id                             AS [CV Customer ID],
 
-    -- Filters
+    -- Contact (one per business: owner, then attendee, purchaser, NetSuite)
+    ac.contact_name                               AS [Contact Name],
+    ac.contact_email                              AS [Contact Email],
+    ac.contact_phone                              AS [Contact Phone],
+    ac.contact_source                             AS [Contact Source],
+
+    -- Tickets for this product
     CASE
         WHEN tm.TM_Open + tm.TM_Undecided + tm.TM_UndecidedAtSale + tm.TM_Expired = 0 THEN 'No Open/Undecided/Expired'
         WHEN tm.TM_Open + tm.TM_Undecided + tm.TM_UndecidedAtSale = 0                 THEN 'Expired Only'
         WHEN tm.TM_Expired = 0                                                        THEN 'Open/Undecided Only'
         ELSE 'Open/Undecided + Expired'
-    END AS ticket_status_group,
-    ts.unscheduled_tickets,
-    ts.ticket_count,
-    ts.first_purchase_date,
-    ts.latest_purchase_date,
-    DATEDIFF(DAY, ts.latest_purchase_date, CAST(GETDATE() AS DATE)) AS days_since_latest_purchase,
-    ts.next_event_date,
-    ts.last_attended_date,
-    CASE WHEN fx.first_10x360_purchase_date IS NOT NULL THEN 'Yes' ELSE 'No' END AS is_10x360_customer,
-    fx.first_10x360_purchase_date,
-    ci.elite_status,
-    ci.pr_status,
-    ci.sbu_status,
-    ci.abr,
-    ci.vertical,
-    ci.sub_vertical,
-    ts.outreach_restriction,
-    la.last_blast_this_product,
-    la.last_called_this_product,
+    END                                           AS [Unscheduled Ticket Group],
+    ts.ticket_count                               AS [Total Tickets],
+    ts.unscheduled_tickets                        AS [Unscheduled Tickets],
+    tm.TM_Open                                    AS [Open Tickets],
+    tm.TM_Undecided                               AS [Undecided Tickets],
+    tm.TM_UndecidedAtSale                         AS [Undecided at Sale Tickets],
+    tm.TM_Expired                                 AS [Expired Tickets],
+    tm.TM_Assigned                                AS [Assigned Tickets],
+    tm.TM_Scheduled                               AS [Scheduled Tickets],
+    tm.TM_Reserved                                AS [Reserved Tickets],
+    tm.TM_Attended                                AS [Attended Tickets],
+    tm.TM_NoShow                                  AS [No Show Tickets],
+    tm.TM_Cancelled                               AS [Cancelled Tickets],
+
+    -- Purchases and events, this product
+    ts.first_purchase_date                        AS [First Purchase Date],
+    ts.latest_purchase_date                       AS [Latest Purchase Date],
+    DATEDIFF(DAY, ts.latest_purchase_date, CAST(GETDATE() AS DATE)) AS [Days Since Latest Purchase],
+    ts.next_event_date                            AS [Next Event Date],
+    ts.last_attended_date                         AS [Last Attended Event Date],
+
+    -- Outreach
+    ts.outreach_restriction                       AS [Outreach Restriction],
+    la.last_blast_this_product                    AS [Last Blast (This Product)],
+    la.last_called_this_product                   AS [Last Call (This Product)],
     DATEDIFF(DAY,
         CASE WHEN la.last_called_this_product IS NULL OR la.last_blast_this_product > la.last_called_this_product
              THEN la.last_blast_this_product ELSE la.last_called_this_product END,
-        GETDATE()) AS days_since_last_touch_this_product,
-    la.last_blast_all_products,
-    la.last_called_all_products,
+        GETDATE()) AS [Days Since Last Contact (This Product)],
+    la.last_blast_all_products                    AS [Last Blast (All Products)],
+    la.last_called_all_products                   AS [Last Call (All Products)],
     DATEDIFF(DAY,
         CASE WHEN la.last_called_all_products IS NULL OR la.last_blast_all_products > la.last_called_all_products
              THEN la.last_blast_all_products ELSE la.last_called_all_products END,
-        GETDATE()) AS days_since_last_touch_all_products,
+        GETDATE()) AS [Days Since Last Contact (All Products)],
 
-    -- Contact (one per business)
-    ac.contact_name,
-    ac.contact_email,
-    ac.contact_phone,
-    ac.contact_source,
-
-    -- Ticket counts by status, this product
-    tm.TM_Open, tm.TM_Undecided, tm.TM_UndecidedAtSale, tm.TM_Expired, tm.TM_Assigned,
-    tm.TM_Scheduled, tm.TM_Reserved, tm.TM_Attended, tm.TM_NoShow, tm.TM_Cancelled,
+    -- Customer profile
+    ci.elite_status                               AS [Elite Status],
+    ci.pr_status                                  AS [PR Client Status],
+    ci.sbu_status                                 AS [SBU Client Status],
+    ci.abr                                        AS [Annual Business Revenue],
+    ci.vertical                                   AS [Vertical],
+    ci.sub_vertical                               AS [Sub-Vertical],
+    CASE WHEN fx.first_10x360_purchase_date IS NOT NULL THEN 'Yes' ELSE 'No' END AS [10X360 Customer],
+    fx.first_10x360_purchase_date                 AS [First 10X360 Purchase Date],
 
     -- Detail
-    ts.priority_date,
-    DATEDIFF(DAY, ts.priority_date, GETDATE()) AS days_in_queue,
-    tt.ticket_types,
-    ti.ticket_ids,
-    so.sales_orders,
-    sp.ticket_summary AS ticket_summary_this_product,
-    sa.ticket_summary AS ticket_summary_all_products,
-    GETDATE() AS list_generated_at
+    ts.priority_date                              AS [Queue Start Date],
+    DATEDIFF(DAY, ts.priority_date, GETDATE())    AS [Days in Queue],
+    tt.ticket_types                               AS [Ticket Types],
+    ti.ticket_ids                                 AS [Ticket IDs],
+    so.sales_orders                               AS [Sales Order Numbers],
+    sp.ticket_summary                             AS [Ticket Summary (This Product)],
+    sa.ticket_summary                             AS [Ticket Summary (All Products)],
+    GETDATE()                                     AS [Generated At]
 FROM cte_all_contacts ac
 INNER JOIN cte_contact_info          ci ON ci.customer_id = ac.customer_id
 INNER JOIN cte_ticket_summary        ts ON ts.customer_id = ac.customer_id
