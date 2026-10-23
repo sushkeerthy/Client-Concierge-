@@ -231,7 +231,7 @@ def test_query(name, cfg, baseline, out_dir, rep, test_ref=None):
     def group_ok(r):
         ou = sum(r[STATUS_COLS[s]] or 0 for s in ("open", "undecided", "undecided_at_sale"))
         ex = r["Expired Tickets"] or 0
-        want = ("No Open/Undecided/Expired" if ou + ex == 0 else "Expired Only" if ou == 0
+        want = ("Nothing to Schedule" if ou + ex == 0 else "Expired Only" if ou == 0
                 else "Open/Undecided Only" if ex == 0 else "Open/Undecided + Expired")
         return r["Unscheduled Ticket Group"] == want
     bad = mismatches(rows, group_ok)

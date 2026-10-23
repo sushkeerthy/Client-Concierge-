@@ -276,7 +276,7 @@ SELECT
 
     -- Tickets for this product
     CASE
-        WHEN tm.TM_Open + tm.TM_Undecided + tm.TM_UndecidedAtSale + tm.TM_Expired = 0 THEN 'No Open/Undecided/Expired'
+        WHEN tm.TM_Open + tm.TM_Undecided + tm.TM_UndecidedAtSale + tm.TM_Expired = 0 THEN 'Nothing to Schedule'
         WHEN tm.TM_Open + tm.TM_Undecided + tm.TM_UndecidedAtSale = 0                 THEN 'Expired Only'
         WHEN tm.TM_Expired = 0                                                        THEN 'Open/Undecided Only'
         ELSE 'Open/Undecided + Expired'
